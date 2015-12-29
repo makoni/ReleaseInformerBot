@@ -8,7 +8,7 @@ var nodeCouchDB = require("node-couchdb");
 var couch = new nodeCouchDB("localhost", 5984);
 var couchDBName = 'release_bot';
  
-var token =  process.env.MYSQL_USER;
+var token =  process.env.TOKEN;
 // Setup polling way 
 var bot = new TelegramBot(token, {polling: true});
 
