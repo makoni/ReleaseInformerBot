@@ -1,0 +1,18 @@
+{
+  "name": "node-releaser",
+  "version": "1.0.0",
+  "description": "Telegram bot to inform about App Store releases",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Sergey Armodin",
+  "license": "ISC",
+  "dependencies" :
+  { 
+  	"node-telegram-bot-api" : ">= 0.17.0",
+  	"node-couchdb": ">= 0.3.1",
+  	"vow": "^0.4.8",
+    "request" : ">= 2.53.0"
+  }
+}
