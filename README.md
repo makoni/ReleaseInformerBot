@@ -6,6 +6,8 @@ Requirements:
 - Node.js
 - CouchDB
 
+Try: https://telegram.me/ReleaseInformerBot
+
 Install:
 
 ```bash
