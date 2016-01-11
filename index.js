@@ -1,19 +1,28 @@
 "use strict";
 
+// Require
 var TelegramBot = require('node-telegram-bot-api');
 var request = require('request');
 var vow = require('vow');
-
+var sleep = require('sleep');
 var nodeCouchDB = require("node-couchdb");
+
+// CouchDB object
 var couch = new nodeCouchDB("localhost", 5984);
 var couchDBName = 'release_bot';
- 
-var token =  process.env.TOKEN;
-// Setup polling way 
+
+// Watcher to check updates in iTunes
+var releaseWatcherObject = new ReleasesWatcher();
+
+// Telegram Bot
+var token = process.env.TOKEN;
 var bot = new TelegramBot(token, {polling: true});
 
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Help command
 bot.onText(/\/help/, function (msg, match) {
-	console.dir(msg);
 	var fromId = (msg.chat) ? msg.chat.id : msg.from.id;
 	var helpText = 'Help: \n\n/help - help\n';
 	helpText += '/search [appName] - search app by name. Example: /search GMail\n';
@@ -23,10 +32,14 @@ bot.onText(/\/help/, function (msg, match) {
 	bot.sendMessage(fromId, helpText);
 });
 
+// List command
 bot.onText(/\/list/, function (msg, match) {
 	var fromId = (msg.chat) ? msg.chat.id : msg.from.id;
 	
+	// getting all chat subscriptions
 	searchInDbByChat(fromId)
+
+		// Creating text message from results
 		.then(
 			function(results) {
 				if (results.length > 0) {
@@ -43,48 +56,60 @@ bot.onText(/\/list/, function (msg, match) {
 						searchResults.push(resultObject);
 					}
 
-					console.log(results);
-
 					return createTextFromResults(searchResults);
 				} else {
 					bot.sendMessage(fromId, 'You have no subscribtions yet.');
 				}
 			},
-			function(err) {bot.sendMessage(fromId, err); }
+			function(err) { bot.sendMessage(fromId, 'You have no subscribtions yet.'); }
 		)
+
+		// Sending message to user with subscriptions list
 		.then(
-			function(text) { bot.sendMessage(fromId, text); }
+			function(text) { if (text.length > 0) bot.sendMessage(fromId, text); }
 		);
 });
 
+// Search command
 bot.onText(/\/search (.+)/, function (msg, match) {
 	var fromId = (msg.chat) ? msg.chat.id : msg.from.id;
 	var searchText = match[1];
 
+	// Searching in iTunes by title
 	searchInITunesByTitle(searchText)
+
+		// handling results
 		.then(
-			// обрабатываем результаты
 			function(result) { return parseSearchResults(result); },
-			function(err) {bot.sendMessage(fromId, err); } // onRejected reaction
+			function(err) {bot.sendMessage(fromId, err); }
 		)
+
+		// creating text message from results
 		.then(
 			function(searchResults) { return createTextFromResults(searchResults); }
 		)
+
+		// sending message to chat
 		.then(
 			function(text) { bot.sendMessage(fromId, text); }
 		); 
 });
 
+// Add command
 bot.onText(/\/add (.+)/, function (msg, match) {
 	var fromId = (msg.chat) ? msg.chat.id : msg.from.id;
 	var bundleToSearch = match[1];
 
+	// searching in iTunes by Bundle ID
 	searchInITunesByBundleId(bundleToSearch)
+
+		// check if searched bundle is in results
 		.then(
-			// обрабатываем результаты
-			function(results) {  return findBundleInResults(results, bundleToSearch); },
-			function(error) { console.log(error);  } 
+			function(results) { return findBundleInResults(results, bundleToSearch); },
+			function(error) { bot.sendMessage(fromId, error); } 
 		)
+
+		// subscribing chat for updates
 		.then(
 			function(result) { 
 				var resultObject = new SearchResultObject();
@@ -95,46 +120,35 @@ bot.onText(/\/add (.+)/, function (msg, match) {
 
 				return subscribeForNewVersions(resultObject, fromId); 
 			},
-			function(err) { console.log(err); } 
+			function(err) { reject(err); } 
 		)
+
+		// sending result message to chat
 		.then(
 			function(result) { bot.sendMessage(fromId, bundleToSearch + ' added to your subscriptions. I will inform you when the new version will come out.');  },
-			function(err) { bot.sendMessage(fromId, 'Adding failed =('); } 
+			function(err) { bot.sendMessage(fromId, "Could not find app with such bundle in App Store"); } 
 		);
 });
 
+// Del command
 bot.onText(/\/del (.+)/, function (msg, match) {
 	var fromId = (msg.chat) ? msg.chat.id : msg.from.id;
 	var bundleToSearch = match[1];
 
-	searchInITunesByBundleId(bundleToSearch)
-		.then(
-			// обрабатываем результаты
-			function(results) {  return findBundleInResults(results, bundleToSearch); },
-			function(error) { console.log(error);  } 
-		)
-		.then(
-			function(result) { return unsubscribeForNewVersions(result.bundleId, fromId); },
-			function(err) { console.log(err); } 
-		)
+	// unsubscribing
+	unsubscribeForNewVersions(bundleToSearch, fromId)	
+
+		// sending result message to chat	
 		.then(
 			function(result) { bot.sendMessage(fromId, bundleToSearch + ' removed from your subscriptions.'); },
 			function(err) { bot.sendMessage(fromId, 'Something is wrong =('); } 
 		);
 });
- 
-// Any kind of message 
-bot.on('message', function (msg) {
-  // var chatId = msg.chat.id;
-  // // photo can be: a file path, a stream or a Telegram file_id 
-  // var photo = 'cats.png';
-  // bot.sendPhoto(chatId, photo, {caption: 'Lovely kittens'});
-});
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
+// Find bundle in iTunes Search Results
 var findBundleInResults = function(results, bundleToSearch) {
 	return new vow.Promise(function(resolve, reject, notify) {
 		var found = false;		
@@ -145,7 +159,7 @@ var findBundleInResults = function(results, bundleToSearch) {
 			if (resultObject.bundleId === bundleToSearch) {				
 				resolve(resultObject);
 				found = true;
-				break;
+				return;
 			}
 		}
 
@@ -155,6 +169,7 @@ var findBundleInResults = function(results, bundleToSearch) {
 	});	
 }
 
+// Search in iTunes by Title using API
 var searchInITunesByTitle = function(searchText) {
 	return new vow.Promise(function(resolve, reject, notify) {
 		var searchString = 'https://itunes.apple.com/search?term=' + encodeURI(searchText) + '&entity=software';
@@ -170,21 +185,27 @@ var searchInITunesByTitle = function(searchText) {
 	});	
 };
 
-var searchInITunesByBundleId = function(searchText) {
+// Search in iTunes by Bundle ID using API
+var searchInITunesByBundleId = function(searchText, appObject) {
 	return new vow.Promise(function(resolve, reject, notify) {
-		var searchString = 'https://itunes.apple.com/lookup?bundleId=' + encodeURI(searchText);			
+		var searchString = 'https://itunes.apple.com/lookup?bundleId=' + encodeURI(searchText);	
 
 		request({url:searchString}, function (error, response, body) {
 			if (error || response.statusCode >= 400) {
 				reject(error);
 			} else {				
 				var result = JSON.parse(body);
-				resolve(result);
+				if (appObject === undefined) {
+					resolve(result);
+				} else {
+					resolve([result, appObject]);
+				}
 		  	}
 		})
 	});	
 };
 
+// Create simple objects with only required fiels from iTunes search results
 var parseSearchResults = function(result) {
 	return new vow.Promise(function(resolve, reject, notify) {
 		var results = [];
@@ -205,11 +226,12 @@ var parseSearchResults = function(result) {
 	});
 };
 
+// Create text message from iTunes results
 var createTextFromResults = function(results) {
 	return new vow.Promise(function(resolve, reject, notify) {
 		var text = 'Results:\n\n'
 
-		var max = (results.length > 4) ? 4 : results.length;
+		var max = (results.length > 10) ? 10 : results.length;
 		for (var i = 0; i<max; i++) {
 			var resultObject = results[i];
 			text += resultObject.title + '\n';
@@ -222,14 +244,15 @@ var createTextFromResults = function(results) {
 			text += 'Nothing found =(';
 		}
 
-		if (results.length > 4) {
-			text += 'And ' + (results.length - 4) + ' more.';
+		if (results.length > 10) {
+			text += 'And ' + (results.length - 10) + ' more.';
 		}
 
 		resolve(text);
 	});
 };
 
+// Find Apps in local DB by Chat ID (chat subscriptions)
 var searchInDbByChat = function(chat) {
 	return new vow.Promise(function(resolve, reject, notify) {
 
@@ -242,8 +265,10 @@ var searchInDbByChat = function(chat) {
 		couch.get(couchDBName, viewUrl, queryOptions, function (err, resData) {
 			if (err) {
 				reject(err);
+				return;
 			} else if (resData.data.rows.length == 0) {
-				reject('Not found');
+				reject('Nothing found');
+				return;
 			} else {		
 				resolve(resData.data.rows);				
 			}
@@ -251,6 +276,7 @@ var searchInDbByChat = function(chat) {
 	});
 };
 
+// Find App in local DB by Bundle ID
 var searchInDbByBundleId = function(bundle) {
 	return new vow.Promise(function(resolve, reject, notify) {
 
@@ -262,23 +288,28 @@ var searchInDbByBundleId = function(bundle) {
 
 		couch.get(couchDBName, viewUrl, queryOptions, function (err, resData) {
 			if (err) {
-				reject(err);
+				reject('Nothing found');
+				return;
 			} else if (resData.data.rows.length == 0) {
-				reject('Not found');
+				reject('Nothing found');
+				return;
 			} else {				
-				resolve(resData.data.rows[0]);				
+				resolve(resData.data.rows[0]);			
 			}
 		});
 	});
 };
 
+// Subscribe chat for app updates
 var subscribeForNewVersions = function(searchResult, chat) {	
-	return new vow.Promise(function(resolve, reject, notify) {
+	return new vow.Promise(function(resolve, reject, notify) {		
 
-		console.log(searchResult);
-
+		// searching in local DB for app
 		searchInDbByBundleId(searchResult.bundleId)
+
 			.then(
+
+				// adding chat to subscribers
 				function(documentObject) {  
 					if (documentObject.value.chats.indexOf(chat) === -1) {
 						documentObject.value.chats.push(chat);
@@ -293,6 +324,8 @@ var subscribeForNewVersions = function(searchResult, chat) {
 						resolve(documentObject);
 					}					
 				},
+
+				// creating new document for the App because it's new app
 				function(error) { 
 
 					couch.uniqid(1, function (err, ids) {
@@ -315,6 +348,7 @@ var subscribeForNewVersions = function(searchResult, chat) {
 	});
 };
 
+// Unsubscribe chat from App updates
 var unsubscribeForNewVersions = function(bundle, chat) {
 	return new vow.Promise(function(resolve, reject, notify) {
 
@@ -341,6 +375,7 @@ var unsubscribeForNewVersions = function(bundle, chat) {
 	});
 }
 
+// Search Result Model constuctor
 function SearchResultObject() {
 	this.title = '';
 	this.bundleId = '';
@@ -348,9 +383,134 @@ function SearchResultObject() {
 	this.version = '';
 };
 
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// var bundleToSearch = 'com.arm1.ru.imetrik';
+// Release Watcher Object constructor
+function ReleasesWatcher() {
+	this.start = function() {
+
+	};
+
+	// inform chats about new versions
+	this.informAboutNewRelease = function(appObject, searchResult) {
+		return new vow.Promise(function(resolve, reject, notify) {			
+			if (appObject === null && searchResult === null) {
+				reject();
+				return;
+			}
+
+			var newVersion = searchResult.version;
+
+			var text = "New version released! Version " + newVersion + "\n\n";
+
+			text += appObject.title + '\n';
+			text += 'Version: ' + newVersion + '\n';
+			text += appObject.url + '\n';
+			text += 'Bundle ID: ' + appObject.bundle_id + '\n\n';
+
+			for (var i = 0; i<appObject.chats.length; i++) {
+				sleep.sleep(1);
+				var chatId = appObject.chats[i];
+				bot.sendMessage(chatId, text);
+			}
+			
+			resolve([appObject, searchResult]);
+		});		
+	};
+
+	// check if app version in local DB is equal to app version in iTunes
+	this.checkVersions = function(appObject, iTunesResult) {
+		return new vow.Promise(function(resolve, reject, notify) {
+			if (iTunesResult.version != undefined && iTunesResult.version != appObject.version) {				
+				resolve([appObject, iTunesResult]);
+			} else {
+				reject();
+			}
+		});
+	};
+
+	// get all apps from local database
+	this.getAllBundles = function() {
+		return new vow.Promise(function(resolve, reject, notify) {
+			var viewUrl = "_design/list/_view/by_bundle";
+			var queryOptions = {};
+			var found = false;
+
+			couch.get(couchDBName, viewUrl, queryOptions, function (err, resData) {				
+				if (err) {
+					reject(err);
+				} else {				
+					resolve(resData.data.rows);				
+				}
+			});
+		});
+	}; 
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// function for interval
+function checkForUpdates() {
+
+	// get all apps from local DB
+	releaseWatcherObject.getAllBundles()
+		.then(
+			function(allBundlesFromLocalDBArray) { 			
+
+				for (var i = 0; i<allBundlesFromLocalDBArray.length; i++) {
+					sleep.sleep(1);				
+
+					// getting App from iTunes by Bundle ID
+					searchInITunesByBundleId(allBundlesFromLocalDBArray[i].value.bundle_id, allBundlesFromLocalDBArray[i].value)
+
+						// check if App version is different
+						.then(
+							function(results) {
+								var localAppObject = results[1];
+								var foundInITunes = results[0].results[0];
+								return releaseWatcherObject.checkVersions(localAppObject, foundInITunes); 
+							},
+							function(error) { console.log("Error: " + error);  } 
+						)
+
+						// inform chats about new version release
+						.then(
+							function(results) { return releaseWatcherObject.informAboutNewRelease(results[0], results[1]); },
+							function() { return releaseWatcherObject.informAboutNewRelease(null, null);  }
+						)
+
+						// update App version in local DB
+						.then(
+							function(result) {
+								var localAppObject = result[0];
+								var iTunesSearchResult = result[1];
+
+								// saving new app version in local database
+								localAppObject.version = iTunesSearchResult.version;
+
+								couch.update(couchDBName, localAppObject, function (err, resData) { 
+									if (err) { 
+										console.log(err);
+									}
+								});
+							},
+							function() {
+								// versions are equal
+							}
+						);
+				}
+			},
+			function(err) { console.log('Could not fetch data from CouchDB'); } // onRejected reaction
+		);	
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// starting Watcher
+setInterval(checkForUpdates, 1000 * 60 * 30);
+checkForUpdates();
 
 
 
