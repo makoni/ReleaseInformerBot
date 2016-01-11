@@ -3,10 +3,23 @@
   "version": "1.0.0",
   "description": "Telegram bot to inform about App Store releases",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/makoni/ReleaseInformerBot"
   },
-  "author": "Sergey Armodin",
+  "bugs": {
+    "url": "https://github.com/makoni/ReleaseInformerBot/issues"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "itunes",
+    "app store"
+  ],
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "Sergey Armodin <mak@arm1.ru>",
   "license": "ISC",
   "dependencies" :
   { 
