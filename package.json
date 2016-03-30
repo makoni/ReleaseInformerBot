@@ -1,32 +1,37 @@
 {
-  "name": "node-releaser",
-  "version": "1.0.0",
-  "description": "Telegram bot to inform about App Store releases",
-  "main": "index.js",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/makoni/ReleaseInformerBot"
-  },
-  "bugs": {
-    "url": "https://github.com/makoni/ReleaseInformerBot/issues"
-  },
-  "keywords": [
-    "telegram",
-    "bot",
-    "itunes",
-    "app store"
-  ],
-  "scripts": {
-    "start": "node index.js"
-  },
-  "author": "Sergey Armodin <mak@arm1.ru>",
-  "license": "ISC",
-  "dependencies" :
-  { 
-  	"node-telegram-bot-api" : ">= 0.17.0",
-  	"node-couchdb": ">= 0.3.1",
-  	"vow": "^0.4.8",
-    "request" : ">= 2.53.0",
-    "sleep" : ">= 3.0.0"
-  }
+    "name": "node-releaser",
+    "version": "1.0.0",
+    "description": "Telegram bot to inform about App Store releases",
+    "main": "index.js",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/makoni/ReleaseInformerBot"
+    },
+    "bugs": {
+        "url": "https://github.com/makoni/ReleaseInformerBot/issues"
+    },
+    "keywords": [
+        "telegram",
+        "bot",
+        "itunes",
+        "app store"
+    ],
+    "scripts": {
+        "start": "node index.js"
+    },
+    "author": "Sergey Armodin <mak@arm1.ru>",
+    "license": "ISC",
+    "dependencies" :
+    {
+  	    "node-telegram-bot-api" : ">= 0.17.0",
+  	    "node-couchdb": ">= 0.3.1",
+  	    "vow": "^0.4.8",
+        "request" : ">= 2.53.0",
+        "sleep" : ">= 3.0.0"
+    },
+    "devDependencies": {
+        "gulp": "^3.9.1",
+        "gulp-eslint": "^2.0.0",
+        "gulp-jasmine": "^2.3.0"
+    }
 }
