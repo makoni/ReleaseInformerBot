@@ -55,7 +55,7 @@ class ReleaseBot {
         	// Searching in iTunes by title
         	self.searchInITunesByTitle(searchText)
         		.then( // handling results
-        			text => { bot.sendMessage( fromId, text); },
+        			text => { bot.sendMessage(fromId, text); },
         			err => { bot.sendMessage(fromId, err); }
         		);
         });
@@ -80,7 +80,7 @@ class ReleaseBot {
         // Del command
         this.bot.onText(/\/del (.+)/, (msg, match) => {
         	const fromId = (msg.chat) ? msg.chat.id : msg.from.id;
-        	const bundleToSearch = match[1];
+        	const bundleToSearch = match[1].trim();
 
         	// unsubscribing
         	self.unsubscribeForNewVersions(bundleToSearch, fromId)
@@ -125,7 +125,7 @@ class ReleaseBot {
     						resolve(documentObject);
     					}
     				},
-    				(error) => { console.log(error); resolve({}); }
+    				error => { console.log(error); resolve({}); }
     			);
     	});
     };
@@ -225,7 +225,7 @@ class ReleaseBot {
     // Search in iTunes by Title using API
     searchInITunesByTitle(searchText) {
     	return new Promise((resolve, reject) => {
-    		const searchString = 'https://itunes.apple.com/search?term=' + encodeURI(searchText) + '&entity=software';
+    		const searchString = 'https://itunes.apple.com/search?term=' + encodeURI(searchText.trim()) + '&entity=software';
 
     		request({ url : searchString }, (error, response, body) => {
     			if (error || response.statusCode > 400) {
@@ -254,10 +254,7 @@ class ReleaseBot {
     						documentObject.value.chats.push(chat);
 
     						couch.update(config.couchDbDatabase, documentObject.value, (err, resData) => {
-    							if (err) {
-    								reject(err);
-    							}
-    							else resolve(resData);
+    							if (err) { reject(err); } else { resolve(resData); }
     						});
     					} else {
     						resolve(documentObject);
