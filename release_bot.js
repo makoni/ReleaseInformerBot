@@ -288,7 +288,6 @@ class ReleaseBot {
     	return new Promise((resolve, reject) => {
     		const viewUrl = "_design/list/_view/by_bundle";
     		const queryOptions = { key: bundle };
-    		let found = false;
 
     		self.couch.get(config.couchDbDatabase, viewUrl, queryOptions, (err, resData) => {
     			if (err) { reject('Nothing found'); return; }
