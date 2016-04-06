@@ -107,6 +107,11 @@ class ReleaseWatcher {
             text += appObject.url + '\n';
             text += 'Bundle ID: ' + appObject.bundle_id + '\n\n';
 
+            if (searchResult.releaseNotes !== undefined) {
+                text += "What's new: " + '\n';
+                text += searchResult.releaseNotes + '\n';
+            }
+
             for (let i = 0; i<appObject.chats.length; i++) {
                 sleep.sleep(1);
                 const chatId = appObject.chats[i];
