@@ -9,13 +9,10 @@ const request = require('request');
 // Models
 const SearchResult = require('./models/search_result');
 
-// CouchDB object
-const nodeCouchDB = require("node-couchdb");
-const couch = new nodeCouchDB(config.couchDbHost, config.couchDbPort);
-
 class ReleaseBot {
-    constructor(telegramBot) {
+    constructor(telegramBot, couch) {
         this.bot = telegramBot;
+        this.couch = couch;
         let bot = this.bot;
         let self = this;
 
@@ -118,7 +115,7 @@ class ReleaseBot {
     					if (documentObject.value.chats.indexOf(chat) !== -1) {
     						documentObject.value.chats.splice(documentObject.value.chats.indexOf(chat),1);
 
-    						couch.update(config.couchDbDatabase, documentObject.value, (err, resData) => {
+    						self.couch.update(config.couchDbDatabase, documentObject.value, (err, resData) => {
     							if (err) { reject(err); } else resolve(resData);
     						});
     					} else {
@@ -140,7 +137,7 @@ class ReleaseBot {
     			key: chat,
     		};
 
-    		couch.get(config.couchDbDatabase, viewUrl, queryOptions, (err, resData) => {
+    		self.couch.get(config.couchDbDatabase, viewUrl, queryOptions, (err, resData) => {
     			if (err) {
     				reject(err);
     				return;
@@ -253,7 +250,7 @@ class ReleaseBot {
     					if (documentObject.value.chats.indexOf(chat) === -1) {
     						documentObject.value.chats.push(chat);
 
-    						couch.update(config.couchDbDatabase, documentObject.value, (err, resData) => {
+    						self.couch.update(config.couchDbDatabase, documentObject.value, (err, resData) => {
     							if (err) { reject(err); } else { resolve(resData); }
     						});
     					} else {
@@ -263,9 +260,9 @@ class ReleaseBot {
 
     				// creating new document for the App because it's new app
     				error => {
-    					couch.uniqid(1,
+    					self.couch.uniqid(1,
                             (err, ids) => {
-        						couch.insert(config.couchDbDatabase, {
+        						self.couch.insert(config.couchDbDatabase, {
         							_id: ids[0],
         							bundle_id: searchResult.bundleId,
         							url: searchResult.url,
@@ -287,12 +284,13 @@ class ReleaseBot {
 
     // Find App in local DB by Bundle ID
     searchInDbByBundleId(bundle) {
+        let self = this;
     	return new Promise((resolve, reject) => {
     		const viewUrl = "_design/list/_view/by_bundle";
     		const queryOptions = { key: bundle };
     		let found = false;
 
-    		couch.get(config.couchDbDatabase, viewUrl, queryOptions, (err, resData) => {
+    		self.couch.get(config.couchDbDatabase, viewUrl, queryOptions, (err, resData) => {
     			if (err) { reject('Nothing found'); return; }
                 if (resData.data.rows.length === 0) { reject('Nothing found'); return; }
                 resolve(resData.data.rows[0]);
