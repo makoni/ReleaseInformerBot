@@ -7,7 +7,7 @@ const config = require('./config');
 const request = require('request');
 
 // Models
-const SearchResult = require('./search_result');
+const SearchResult = require('./models/search_result');
 
 // CouchDB object
 const nodeCouchDB = require("node-couchdb");
@@ -235,7 +235,7 @@ class ReleaseBot {
 
                 this.parseSearchResults( JSON.parse(body) )
                     .then(
-                        searchResults => { console.log(searchResults); resolve( this.createTextFromResults(searchResults) ); }
+                        searchResults => { resolve( this.createTextFromResults(searchResults) ); }
                     );
     		});
     	});
