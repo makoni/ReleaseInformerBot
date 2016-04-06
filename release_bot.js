@@ -22,11 +22,17 @@ class ReleaseBot {
         // Help command
         this.bot.onText(/\/help/, (msg) => {
         	const fromId = (msg.chat) ? msg.chat.id : msg.from.id;
-        	let helpText = 'Help: \n\n/help - help\n';
-        	helpText += '/search [appName] - search app by name. Example: /search GMail\n';
-        	helpText += '/add [bundle ID] - subscribe for notifications about new versions of app by Bundle ID (you can find it with /search). Example: /add com.google.Gmail\n';
+        	let helpText = 'Help: \n\n/help - help.\n';
+        	helpText += '/search [appName] - search app by name.\n';
+        	helpText += '/add [bundle ID] - subscribe for notifications about new versions of app by Bundle ID (you can find it with /search).\n';
         	helpText += '/del [bundle ID] - unsubscribe from notifications about new versions by Bundle ID. Example: /del com.google.Gmail\n';
-        	helpText += '/list - list of subscribtions\n';
+        	helpText += '/list - list of subscribtions\n\n';
+            helpText += 'Examples:\n';
+            helpText += '/search GMail\n';
+            helpText += '/add com.google.Gmail\n';
+            helpText += '/del com.google.Gmail\n';
+            helpText += '/list\n';
+
         	bot.sendMessage(fromId, helpText);
         });
 
@@ -49,7 +55,7 @@ class ReleaseBot {
         	// Searching in iTunes by title
         	self.searchInITunesByTitle(searchText)
         		.then( // handling results
-        			text => { console.log(text); bot.sendMessage( fromId, text); },
+        			text => { bot.sendMessage( fromId, text); },
         			err => { bot.sendMessage(fromId, err); }
         		);
         });
