@@ -3,6 +3,7 @@
 const gulp = require('gulp');
 const jasmine = require('gulp-jasmine');
 const eslint = require('gulp-eslint');
+const sequence = require('run-sequence');
 
 gulp.task('lint', function () {
     return gulp.src(['**/*.js','*.js','!node_modules/**'])
@@ -38,7 +39,21 @@ gulp.task('lint', function () {
         .pipe(eslint.failAfterError());
 });
 
-gulp.task('default', ['lint'], function() {
-    gulp.src('spec/BotSpec.js')
+gulp.task('searchresulttest', () => {
+    return gulp.src('spec/SearchResultSpec.js')
 		.pipe(jasmine());
+});
+
+gulp.task('bottest', () => {
+    return gulp.src('spec/BotSpec.js')
+		.pipe(jasmine());
+});
+
+gulp.task('default', (callback) => {
+	sequence(
+		'lint',
+		'bottest',
+        'searchresulttest',
+        callback
+	);
 });
