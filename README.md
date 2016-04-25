@@ -11,6 +11,7 @@ Try: https://telegram.me/ReleaseInformerBot
 Install:
 
 ```bash
+npm install pm2 -g
 npm install
 TOKEN='TOKEN' pm2 start index.js --watch
 ```
