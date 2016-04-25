@@ -26,7 +26,7 @@
     "node-couchdb": "^1.1.0",
     "node-telegram-bot-api": "*",
     "request": "^2.72.0",
-    "sleep": "*"
+    "sleep": "^3.0.1"
   },
   "devDependencies": {
     "gulp": "^3.9.1",
