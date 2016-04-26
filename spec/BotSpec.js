@@ -7,7 +7,7 @@ let releaseBot = new ReleaseBot();
 
 describe("ReleaseBot Class Tests --> ", function() {
 
-    let results = new Array();
+    let results = [];
 
     describe("Search -> ", function() {
         it("CompareShots", function(done) {
