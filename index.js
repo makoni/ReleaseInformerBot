@@ -24,4 +24,3 @@ utils.p('Bot started');
 // Watcher to check updates in iTunes
 const ReleasesWatcher = require('./lib/release_watcher');
 let releaseWatcher = new ReleasesWatcher(releaseBot, couch);
-releaseWatcher.checkForUpdates();
