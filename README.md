@@ -1,6 +1,6 @@
 # Release Informer Bot 
 
-[![Build Status](https://travis-ci.org/makoni/ReleaseInformerBot.svg?branch=master)](https://travis-ci.org/makoni/ReleaseInformerBot) [![Dependency Status](https://david-dm.org/makoni/ReleaseInformerBot.svg)](https://david-dm.org/makoni/ReleaseInformerBot) [![Code Climate](https://codeclimate.com/github/makoni/ReleaseInformerBot/badges/gpa.svg?1)](https://codeclimate.com/github/makoni/ReleaseInformerBot) [![bitHound Code](https://www.bithound.io/github/makoni/ReleaseInformerBot/badges/code.svg)](https://www.bithound.io/github/makoni/ReleaseInformerBot)
+[![Build Status](https://travis-ci.org/makoni/ReleaseInformerBot.svg?branch=master)](https://travis-ci.org/makoni/ReleaseInformerBot) [![Dependency Status](https://david-dm.org/makoni/ReleaseInformerBot.svg)](https://david-dm.org/makoni/ReleaseInformerBot) [![Code Climate](https://codeclimate.com/github/makoni/ReleaseInformerBot/badges/gpa.svg?1)](https://codeclimate.com/github/makoni/ReleaseInformerBot) [![bitHound Code](https://www.bithound.io/github/makoni/ReleaseInformerBot/badges/code.svg)](https://www.bithound.io/github/makoni/ReleaseInformerBot) [![Try on Telegram](https://img.shields.io/badge/Telegram-%40ReleaseInformerBot-brightgreen.svg)](https://telegram.me/ReleaseInformerBot)
 
 Simple Telegram bot that will inform you on when the new version of an app released in App Store.
 
