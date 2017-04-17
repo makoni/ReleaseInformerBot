@@ -27,14 +27,14 @@
     "gulp-eslint": "^2.1.0",
     "gulp-jasmine": "^2.4.2",
     "node-couchdb": "^1.1.1",
-    "node-telegram-bot-api": "^0.23.3",
+    "node-telegram-bot-api": "^0.27.0",
     "request": "^2.81.0",
     "run-sequence": "^1.2.2",
-    "sleep": "^3.0.1"
+    "sleep": "^5.1.1"
   },
   "devDependencies": {
     "gulp": "^3.9.1",
-    "gulp-eslint": "^2.0.0",
+    "gulp-eslint": "^3.0.1",
     "gulp-jasmine": "^2.3.0",
     "run-sequence": "^1.1.5"
   }
