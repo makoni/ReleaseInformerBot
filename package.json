@@ -28,7 +28,7 @@
     "gulp-jasmine": "^2.4.2",
     "node-couchdb": "^1.2.0",
     "node-telegram-bot-api": "^0.23.3",
-    "request": "^2.81.0",
+    "request": "^2.83.0",
     "run-sequence": "^1.2.2",
     "sleep": "^3.0.1"
   },
