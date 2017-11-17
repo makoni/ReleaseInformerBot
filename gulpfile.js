@@ -10,7 +10,7 @@ gulp.task('lint', function () {
         .pipe(eslint(
             {
                 "parserOptions": {
-                    "ecmaVersion": 6,
+                    "ecmaVersion": 8,
                     "sourceType": "module",
                     "ecmaFeatures": {
                         "jsx": true
@@ -24,7 +24,7 @@ gulp.task('lint', function () {
                     "no-invalid-this" : 2,
                     "no-multi-spaces" : 2,
                     "no-unmodified-loop-condition" : 2,
-                    "no-unused-expressions" : 2,
+                    "no-unused-expressions" : 1,
                     "no-unused-labels" : 2,
                     "no-shadow" : 2,
                     "no-unused-vars" : 1,
