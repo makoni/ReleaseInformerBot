@@ -24,7 +24,7 @@
   "dependencies": {
     "colors": "^1.4.0",
     "gulp-jasmine": "^2.4.2",
-    "node-couchdb": "^1.2.0",
+    "node-couchdb": "^2.0.0",
     "node-telegram-bot-api": "^0.29.0",
     "request": "^2.88.2",
     "sleep": "^6.3.0"
