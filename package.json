@@ -30,9 +30,9 @@
     "sleep": "^6.3.0"
   },
   "devDependencies": {
-    "gulp": "^3.9.1",
-    "gulp-eslint": "^4.0.0",
-    "gulp-jasmine": "^2.3.0",
-    "run-sequence": "^2.2.0"
+    "gulp": "^4.0.2",
+    "gulp-eslint": "^6.0.0",
+    "gulp-jasmine": "^4.0.0",
+    "run-sequence": "^2.2.1"
   }
 }
