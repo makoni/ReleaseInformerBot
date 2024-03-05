@@ -1,6 +1,6 @@
 {
   "name": "node-releaser",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Telegram bot to inform about App Store releases",
   "main": "index.js",
   "repository": {
@@ -23,16 +23,9 @@
   "license": "ISC",
   "dependencies": {
     "colors": "^1.4.0",
-    "gulp-jasmine": "^2.4.2",
     "node-couchdb": "^2.0.0",
-    "node-telegram-bot-api": "^0.61.0",
+    "node-telegram-bot-api": "^0.63.0",
     "request": "^2.88.2",
     "sleep": "^6.3.0"
-  },
-  "devDependencies": {
-    "gulp": "^4.0.2",
-    "gulp-eslint": "^6.0.0",
-    "gulp-jasmine": "^4.0.0",
-    "run-sequence": "^2.2.1"
   }
 }
