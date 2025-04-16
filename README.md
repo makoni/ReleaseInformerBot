@@ -1,35 +1,27 @@
-# Release Informer Bot 
+# ReleaseInformerBot
 
-[![Code Climate](https://codeclimate.com/github/makoni/ReleaseInformerBot/badges/gpa.svg?1)](https://codeclimate.com/github/makoni/ReleaseInformerBot) [![Try on Telegram](https://img.shields.io/badge/Telegram-%40ReleaseInformerBot-brightgreen.svg)](https://telegram.me/ReleaseInformerBot)
+💧 A project built with the Vapor web framework.
 
-Simple Telegram bot that will inform you on when the new version of an app released in App Store.
+## Getting Started
 
-Requirements:
-- Node.js
-- CouchDB
-
-Try: https://telegram.me/ReleaseInformerBot
-
-Install:
-
+To build the project using the Swift Package Manager, run the following command in the terminal from the root of the project:
 ```bash
-npm install pm2 -g
-npm install
-TOKEN='TOKEN' pm2 start index.js --watch
+swift build
 ```
 
-Views for CouchDB:
-```json
-{
-   "_id": "_design/list",
-   "language": "javascript",
-   "views": {
-       "by_bundle": {
-           "map": "function(doc) {\n  emit(doc.bundle_id, doc);\n}"
-       },
-       "by_chat": {
-           "map": "function(doc) {\n  for (var i=0; i<doc.chats.length; i++) {\n    emit(doc.chats[i], doc);\n  }\n}"
-       }
-   }
-}
+To run the project and start the server, use the following command:
+```bash
+swift run
 ```
+
+To execute tests, use the following command:
+```bash
+swift test
+```
+
+### See more
+
+- [Vapor Website](https://vapor.codes)
+- [Vapor Documentation](https://docs.vapor.codes)
+- [Vapor GitHub](https://github.com/vapor)
+- [Vapor Community](https://github.com/vapor-community)
