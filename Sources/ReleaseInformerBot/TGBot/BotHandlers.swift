@@ -13,6 +13,7 @@ final class BotHandlers {
     static func addHandlers(bot: TGBot) async {
         await help(bot: bot)
         await list(bot: bot)
+        await search(bot: bot)
         await commandShowButtonsHandler(bot: bot)
         await buttonsActionHandler(bot: bot)
     }
@@ -25,10 +26,22 @@ final class BotHandlers {
 
     private static func list(bot: TGBot) async {
         await bot.dispatcher.add(TGCommandHandler(commands: ["/list"]) { update in
-            guard let fromId = update.message?.from?.id else { return }
+            guard let fromId = update.message?.chat.id else { return }
 
             let subscriptions = try await dbManager.search(byChatID: fromId)
             let message = Self.makeListMessage(subscriptions)
+
+            try await update.message?.reply(text: message, bot: bot)
+        })
+    }
+
+    private static func search(bot: TGBot) async {
+        await bot.dispatcher.add(TGCommandHandler(commands: ["/search"]) { update in
+            guard var searchString = update.message?.text else { return }
+            searchString = String(searchString.dropFirst("/search".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+
+            let searchResults = try await searchManager.search(byTitle: searchString)
+            let message = Self.makeSearchResultsMessage(searchResults)
 
             try await update.message?.reply(text: message, bot: bot)
         })
@@ -91,6 +104,24 @@ private extension BotHandlers {
         /del com.google.Gmail
         /list
         """
+
+    static func makeSearchResultsMessage(_ results: [SearchResult]) -> String {
+        if results.isEmpty {
+            return "Nothing found in App Store."
+        }
+
+        var text = "Search results:\n\n"
+
+        for result in results[0..<min(10, results.count)] {
+            text += result.title + "\n"
+            text += "Version: " + (result.version) + "\n"
+            text += "URL: " + result.url + "\n"
+            text += "Bundle ID: " + result.bundleId + "\n\n"
+        }
+
+        return text
+    }
+
     static func makeListMessage(_ subscriptions: [Subscription]) -> String {
         if subscriptions.isEmpty {
             return "You are not subscribed to any apps updates."

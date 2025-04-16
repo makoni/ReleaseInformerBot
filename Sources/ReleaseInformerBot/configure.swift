@@ -30,3 +30,4 @@ let config = CouchDBClient.Config(
 )
 
 let dbManager = DBManager()
+let searchManager = SearchManager()
