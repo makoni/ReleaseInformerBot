@@ -1,8 +1,8 @@
 //
-//  File.swift
-//  
+//  BotHandlers.swift
+//  ReleaseInformerBot
 //
-//  Created by Oleh Hudeichuk on 01.06.2021.
+//  Created by Sergei Armodin on 17.04.2025.
 //
 
 import Vapor

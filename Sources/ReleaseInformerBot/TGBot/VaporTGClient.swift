@@ -1,8 +1,8 @@
 //
 //  VaporTGClient.swift
-//  Vapor-telegram-bot-example
+//  ReleaseInformerBot
 //
-//  Created by Oleh Hudeichuk on 01.07.2024.
+//  Created by Sergei Armodin on 17.04.2025.
 //
 
 import Foundation

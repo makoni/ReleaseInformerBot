@@ -13,7 +13,7 @@ public func configure(_ app: Application) async throws {
         log: app.logger
     )
 
-    let botActor: TGBotActor = .init()
+    let botActor: BotActor = .init()
     await botActor.setBot(bot)
     await BotHandlers.addHandlers(bot: botActor.bot)
     try await botActor.bot.start()

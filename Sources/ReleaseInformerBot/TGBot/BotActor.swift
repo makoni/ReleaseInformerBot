@@ -1,13 +1,13 @@
 //
-//  TGBotActor.swift
-//  Vapor-telegram-bot-example
+//  BotActor.swift
+//  ReleaseInformerBot
 //
-//  Created by Oleh Hudeichuk on 17.04.2023.
+//  Created by Sergei Armodin on 17.04.2025.
 //
 
 import SwiftTelegramSdk
 
-actor TGBotActor {
+actor BotActor {
     private var _bot: TGBot!
 
     var bot: TGBot {

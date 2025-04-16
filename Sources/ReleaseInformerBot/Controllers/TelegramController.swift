@@ -1,8 +1,8 @@
 //
 //  TelegramController.swift
-//  Vapor-telegram-bot-example
+//  ReleaseInformerBot
 //
-//  Created by Oleh Hudeichuk on 10.03.2023.
+//  Created by Sergei Armodin on 17.04.2025.
 //
 
 import Foundation
