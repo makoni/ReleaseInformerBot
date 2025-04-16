@@ -19,16 +19,38 @@ actor SearchManager {
 
     private let httpClient = HTTPClient(eventLoopGroupProvider: .singleton)
 
+    enum SearchType {
+        case title(title: String)
+        case bundleId(bundleId: String)
+    }
+
     func search(byTitle title: String) async throws -> [SearchResult] {
+        return try await search(byType: .title(title: title))
+    }
+
+    func search(byBundleID bundleID: String) async throws -> [SearchResult] {
+        return try await search(byType: .bundleId(bundleId: bundleID))
+    }
+
+    private func search(byType searchType: SearchType) async throws -> [SearchResult] {
         // const searchString = 'https://itunes.apple.com/search?term=' + encodeURI(searchText.trim()) + '&entity=software';
         var urlBuilder = URLComponents()
         urlBuilder.scheme = "https"
         urlBuilder.host = "itunes.apple.com"
         urlBuilder.path = "/search"
-        urlBuilder.queryItems = [
-            URLQueryItem(name: "term", value: title),
-            URLQueryItem(name: "entity", value: "software"),
-        ]
+
+        switch searchType {
+            case .title(title: let title):
+            urlBuilder.queryItems = [
+                URLQueryItem(name: "term", value: title),
+                URLQueryItem(name: "entity", value: "software"),
+            ]
+        case .bundleId(bundleId: let bundleId):
+            urlBuilder.queryItems = [
+                URLQueryItem(name: "bundleId", value: bundleId)
+            ]
+        }
+
 
         guard let url = urlBuilder.url else {
             logger.error("Could not build URL")
