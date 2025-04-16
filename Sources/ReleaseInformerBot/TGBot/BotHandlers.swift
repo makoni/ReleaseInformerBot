@@ -8,7 +8,7 @@
 import Vapor
 @preconcurrency import SwiftTelegramSdk
 
-final class DefaultBotHandlers {
+final class BotHandlers {
 
     static func addHandlers(bot: TGBot) async {
         await defaultBaseHandler(bot: bot)

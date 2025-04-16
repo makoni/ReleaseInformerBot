@@ -4,18 +4,18 @@ import CouchDBClient
 
 // configures your application
 public func configure(_ app: Application) async throws {
-    let tgApi: String = ProcessInfo.processInfo.environment["apiKey"] ?? ""
+    let bot: TGBot = try await .init(
+        connectionType: .longpolling(limit: nil, timeout: nil, allowedUpdates: nil),
+        dispatcher: nil,
+        tgClient: VaporTGClient(client: app.client),
+        tgURI: TGBot.standardTGURL,
+        botId: ProcessInfo.processInfo.environment["apiKey"] ?? "",
+        log: app.logger
+    )
 
-    let bot: TGBot = try await .init(connectionType: .longpolling(limit: nil,
-                                                                  timeout: nil,
-                                                                  allowedUpdates: nil),
-                                     dispatcher: nil,
-                                     tgClient: VaporTGClient(client: app.client),
-                                     tgURI: TGBot.standardTGURL,
-                                     botId: tgApi,
-                                     log: app.logger)
+    let botActor: TGBotActor = .init()
     await botActor.setBot(bot)
-    await DefaultBotHandlers.addHandlers(bot: botActor.bot)
+    await BotHandlers.addHandlers(bot: botActor.bot)
     try await botActor.bot.start()
 
     // uncomment to serve files from /Public folder
