@@ -6,14 +6,20 @@
 //
 
 import Vapor
+import CouchDBClient
 @preconcurrency import SwiftTelegramSdk
 
+let couchDBClient = CouchDBClient(config: config)
+
 final class BotHandlers {
+
+    static let db = "release_bot"
 
     static func addHandlers(bot: TGBot) async {
 //        await defaultBaseHandler(bot: bot)
 //        await messageHandler(bot: bot)
         await help(bot: bot)
+        await list(bot: bot)
         await commandShowButtonsHandler(bot: bot)
         await buttonsActionHandler(bot: bot)
     }
@@ -51,6 +57,44 @@ final class BotHandlers {
                 /list
                 """
             try await update.message?.reply(text: helpText, bot: bot)
+        })
+    }
+
+    private static func list(bot: TGBot) async {
+        await bot.dispatcher.add(TGCommandHandler(commands: ["/list"]) { update in
+            guard let fromId = update.message?.from?.id else { return }
+
+
+            let response = try await couchDBClient.get(
+                fromDB: Self.db,
+                uri: "_design/list/_view/by_chat",
+                queryItems: [
+                    URLQueryItem(name: "key", value: "\(fromId)")
+                ]
+            )
+
+            let expectedBytes =
+                response.headers
+                .first(name: "content-length")
+                .flatMap(Int.init) ?? 1024 * 1024 * 10
+            var bytes = try await response.body.collect(upTo: expectedBytes)
+
+            guard let data = bytes.readData(length: bytes.readableBytes) else {
+                bot.log.error("Could not read response")
+                return
+            }
+
+            let decoder = JSONDecoder()
+
+            let subscriptions = try decoder.decode(
+                RowsResponse<Subscription>.self,
+                from: data
+            ).rows.map({ $0.value })
+
+
+            let message = Self.makeListMessage(subscriptions)
+
+            try await update.message?.reply(text: message, bot: bot)
         })
     }
 
@@ -95,3 +139,21 @@ final class BotHandlers {
     }
 }
 
+private extension BotHandlers {
+    static func makeListMessage(_ subscriptions: [Subscription]) -> String {
+        if subscriptions.isEmpty {
+            return "You are not subscribed to any apps updates."
+        }
+
+        var text = "Results:\n\n"
+
+        for subscription in subscriptions {
+            text += subscription.title + "\n"
+            text += "Version: " + (subscription.version.last ?? "") + "\n"
+            text += "URL: " + subscription.url + "\n"
+            text += "Bundle ID: " + subscription.bundleId + "\n\n"
+        }
+
+        return text
+    }
+}
