@@ -28,3 +28,5 @@ public func configure(_ app: Application) async throws {
 let config = CouchDBClient.Config(
     userName: "admin"
 )
+
+let dbManager = DBManager()
