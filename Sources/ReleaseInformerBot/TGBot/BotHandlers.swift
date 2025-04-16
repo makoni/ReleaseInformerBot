@@ -11,9 +11,9 @@ import Vapor
 final class BotHandlers {
 
     static func addHandlers(bot: TGBot) async {
-        await defaultBaseHandler(bot: bot)
-        await messageHandler(bot: bot)
-        await commandPingHandler(bot: bot)
+//        await defaultBaseHandler(bot: bot)
+//        await messageHandler(bot: bot)
+        await help(bot: bot)
         await commandShowButtonsHandler(bot: bot)
         await buttonsActionHandler(bot: bot)
     }
@@ -33,9 +33,24 @@ final class BotHandlers {
         })
     }
 
-    private static func commandPingHandler(bot: TGBot) async {
-        await bot.dispatcher.add(TGCommandHandler(commands: ["/ping"]) { update in
-            try await update.message?.reply(text: "pong", bot: bot)
+    private static func help(bot: TGBot) async {
+        await bot.dispatcher.add(TGCommandHandler(commands: ["/help"]) { update in
+            let helpText = """
+                Help: 
+                
+                /help - help.
+                /search [app name] - search app by name.
+                /add [bundle ID] - subscribe for notifications about new versions of app by Bundle ID (you can find it with /search).
+                /del [bundle ID]- unsubscribe from notifications about new versions by Bundle ID.
+                /list - list of subscribtions
+                
+                Examples:
+                /search GMail
+                /add com.google.Gmail
+                /del com.google.Gmail
+                /list
+                """
+            try await update.message?.reply(text: helpText, bot: bot)
         })
     }
 
