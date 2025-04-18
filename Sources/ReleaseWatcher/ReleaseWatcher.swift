@@ -28,8 +28,7 @@ let logger = Logger(label: "ReleaseWatcher")
 public actor ReleaseWatcher {
 	private let timer: DispatchSourceTimer
 
-	@MainActor
-	private var appCheckTimer: Timer?
+	private let appCheckTimer: DispatchSourceTimer
 	private var isRunning = false
 	private let dbManager: DBManager
 	private let searchManager = SearchManager()
@@ -42,6 +41,7 @@ public actor ReleaseWatcher {
 		self.dbManager = dbManager
 
 		timer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
+        appCheckTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
 
 		timer.schedule(deadline: .now(), repeating: .seconds(60 * 5))
 		timer.setEventHandler { [weak self] in
@@ -50,6 +50,13 @@ public actor ReleaseWatcher {
 				await self?.run()
 			}
 		}
+
+        appCheckTimer.schedule(deadline: .now(), repeating: .seconds(2))
+        appCheckTimer.setEventHandler { [weak self] in
+            Task { [weak self] in
+                try await self?.handleSubscription()
+            }
+        }
 	}
 
 	public func setBot(_ bot: TGBot?) {
@@ -58,16 +65,7 @@ public actor ReleaseWatcher {
 
 	public func start() async {
 		timer.resume()
-
-		await MainActor.run {
-			appCheckTimer = Timer.scheduledTimer(
-				withTimeInterval: 2, repeats: true,
-				block: { _ in
-					Task {
-						try await self.handleSubscription()
-					}
-				})
-		}
+        appCheckTimer.resume()
 	}
 
 	func handleSubscription() async throws {
