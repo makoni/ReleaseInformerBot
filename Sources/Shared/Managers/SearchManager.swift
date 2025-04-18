@@ -39,15 +39,16 @@ public actor SearchManager {
         var urlBuilder = URLComponents()
         urlBuilder.scheme = "https"
         urlBuilder.host = "itunes.apple.com"
-        urlBuilder.path = "/search"
 
         switch searchType {
             case .title(title: let title):
+            urlBuilder.path = "/search"
             urlBuilder.queryItems = [
                 URLQueryItem(name: "term", value: title),
                 URLQueryItem(name: "entity", value: "software"),
             ]
         case .bundleId(bundleId: let bundleId):
+            urlBuilder.path = "/lookup"
             urlBuilder.queryItems = [
                 URLQueryItem(name: "bundleId", value: bundleId)
             ]
