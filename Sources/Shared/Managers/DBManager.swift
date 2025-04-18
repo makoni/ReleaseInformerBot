@@ -34,13 +34,13 @@ public actor DBManager {
         }
 
         // add new one
-        let subscription = Subscription(bundleId: result.bundleID, url: result.url, title: result.title, version: [result.version], chats: [chatID])
+        let subscription = Subscription(bundleID: result.bundleID, url: result.url, title: result.title, version: [result.version], chats: [chatID])
         _ = try await couchDBClient.insert(dbName: db, doc: subscription)
         logger.info("\(result.bundleID) has been added to DB")
     }
 
-    public func unsubscribeFromNewVersions(_ result: SearchResult, forChatID chatID: Int64) async throws {
-        guard var subscription = try await self.searchByBundleID(result.bundleID) else { return }
+    public func unsubscribeFromNewVersions(_ bundleID: String, forChatID chatID: Int64) async throws -> Subscription? {
+        guard var subscription = try await self.searchByBundleID(bundleID) else { return nil }
 
         if subscription.chats.contains(chatID) {
             subscription.chats.remove(chatID)
@@ -51,6 +51,8 @@ public actor DBManager {
                 _ = try await couchDBClient.delete(fromDb: db, doc: subscription)
             }
         }
+
+        return subscription
     }
 
     func searchByBundleID(_ bundleID: String) async throws -> Subscription? {

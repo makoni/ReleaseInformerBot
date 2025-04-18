@@ -8,6 +8,7 @@
 import Vapor
 import CouchDBClient
 import Shared
+import Logging
 @preconcurrency import SwiftTelegramSdk
 
 let dbManager = DBManager()
@@ -59,16 +60,13 @@ final class BotHandlers {
             guard var searchString = update.message?.text else { return }
             searchString = String(searchString.dropFirst("/del".count)).trimmingCharacters(in: .whitespacesAndNewlines)
 
-            let searchResults = try await searchManager.search(byBundleID: searchString)
-            guard let result = searchResults.first else {
-                let message = Self.makeSearchResultsMessage([])
+            guard let subscription = try await dbManager.unsubscribeFromNewVersions(searchString, forChatID: chatID) else {
+                let message = "Subscription for <b>\(searchString)</b> not found"
                 try await update.message?.reply(text: message, bot: bot, parseMode: .html)
                 return
             }
 
-            try await dbManager.unsubscribeFromNewVersions(result, forChatID: chatID)
-
-            let message = "<b>\(result.title)</b> with bundle ID <b>\(result.bundleID)</b> has been removed from your subscriptions."
+            let message = "<b>\(subscription.title)</b> with bundle ID <b>\(subscription.bundleID)</b> has been removed from your subscriptions."
             try await update.message?.reply(text: message, bot: bot, parseMode: .html)
         })
     }
@@ -94,42 +92,66 @@ final class BotHandlers {
     }
 
     private static func commandShowButtonsHandler(bot: TGBot) async {
-        await bot.dispatcher.add(TGCommandHandler(commands: ["/show_buttons"]) { update in
-            guard let userId = update.message?.from?.id else { fatalError("user id not found") }
+        await bot.dispatcher.add(TGCommandHandler(commands: ["/start"]) { update in
+            guard let chatID = update.message?.chat.id else {
+                bot.log.error("User ID not found")
+                return
+            }
             let buttons: [[TGInlineKeyboardButton]] = [
-                [.init(text: "Button 1", callbackData: "press 1"), .init(text: "Button 2", callbackData: "press 2")]
+                [
+                    .init(text: "Help", callbackData: "help"),
+                    .init(text: "Subscriptions List", callbackData: "list")
+                ]
             ]
             let keyboard: TGInlineKeyboardMarkup = .init(inlineKeyboard: buttons)
-            let params: TGSendMessageParams = .init(chatId: .chat(userId),
-                                                    text: "Keyboard active",
-                                                    replyMarkup: .inlineKeyboardMarkup(keyboard))
+            let params: TGSendMessageParams = .init(
+                chatId: .chat(chatID),
+                text: "Keyboard active",
+                replyMarkup: .inlineKeyboardMarkup(keyboard)
+            )
             try await bot.sendMessage(params: params)
         })
     }
 
     private static func buttonsActionHandler(bot: TGBot) async {
-        await bot.dispatcher.add(TGCallbackQueryHandler(pattern: "press 1") { update in
-            bot.log.info("press 1")
-            guard let userId = update.callbackQuery?.from.id else { fatalError("user id not found") }
-            let params: TGAnswerCallbackQueryParams = .init(callbackQueryId: update.callbackQuery?.id ?? "0",
-                                                            text: update.callbackQuery?.data  ?? "data not exist",
-                                                            showAlert: nil,
-                                                            url: nil,
-                                                            cacheTime: nil)
+        await bot.dispatcher.add(TGCallbackQueryHandler(pattern: "help") { update in
+            bot.log.info("help")
+
+            guard let chatID = update.callbackQuery?.from.id else {
+                bot.log.error("user id not found")
+                return
+            }
+
+            let params: TGAnswerCallbackQueryParams = .init(
+                callbackQueryId: update.callbackQuery?.id ?? "0",
+                text: update.callbackQuery?.data  ?? "data not exist",
+                showAlert: nil,
+                url: nil,
+                cacheTime: nil
+            )
             try await bot.answerCallbackQuery(params: params)
-            try await bot.sendMessage(params: .init(chatId: .chat(userId), text: "press 1"))
+            try await bot.sendMessage(params: .init(chatId: .chat(chatID), text: Self.helpText, parseMode: .html))
         })
         
-        await bot.dispatcher.add(TGCallbackQueryHandler(pattern: "press 2") { update in
-            bot.log.info("press 2")
-            guard let userId = update.callbackQuery?.from.id else { fatalError("user id not found") }
-            let params: TGAnswerCallbackQueryParams = .init(callbackQueryId: update.callbackQuery?.id ?? "0",
-                                                            text: update.callbackQuery?.data  ?? "data not exist",
-                                                            showAlert: nil,
-                                                            url: nil,
-                                                            cacheTime: nil)
+        await bot.dispatcher.add(TGCallbackQueryHandler(pattern: "list") { update in
+            guard let userId = update.callbackQuery?.from.id else {
+                bot.log.error("user id not found")
+                return
+            }
+
+            let params: TGAnswerCallbackQueryParams = .init(
+                callbackQueryId: update.callbackQuery?.id ?? "0",
+                text: update.callbackQuery?.data  ?? "data not exist",
+                showAlert: nil,
+                url: nil,
+                cacheTime: nil
+            )
             try await bot.answerCallbackQuery(params: params)
-            try await bot.sendMessage(params: .init(chatId: .chat(userId), text: "press 2"))
+
+            let subscriptions = try await dbManager.search(byChatID: userId)
+            let message = Self.makeListMessage(subscriptions)
+
+            try await bot.sendMessage(params: .init(chatId: .chat(userId), text: message, parseMode: .html))
         })
     }
 }
@@ -179,7 +201,7 @@ private extension BotHandlers {
             text += "<b>" + subscription.title + "</b>\n"
             text += "Version: <b>" + (subscription.version.last ?? "") + "</b>\n"
             text += "URL: " + subscription.url + "\n"
-            text += "Bundle ID: <b>" + subscription.bundleId + "</b>\n\n"
+            text += "Bundle ID: <b>" + subscription.bundleID + "</b>\n\n"
         }
 
         return text
