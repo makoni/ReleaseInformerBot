@@ -83,6 +83,7 @@ public actor ReleaseWatcher {
 
 				guard let appData = try await searchManager.search(byBundleID: subscription.bundleID).first else {
 					logger.error("App not found with Bundle ID: \(subscription.bundleID)")
+                    try await dbManager.deleteSubscription(subscription)
 					continue
 				}
 				guard !subscription.version.contains(appData.version) else {
