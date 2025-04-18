@@ -11,7 +11,7 @@ public func configure(_ app: Application) async throws {
     let bot: TGBot = try await .init(
         connectionType: .longpolling(limit: nil, timeout: nil, allowedUpdates: nil),
         dispatcher: nil,
-        tgClient: AsyncHttpTGClient(),
+        tgClient: URLSessionTGClient(),
         tgURI: TGBot.standardTGURL,
         botId: ProcessInfo.processInfo.environment["apiKey"] ?? "",
         log: app.logger

@@ -1,17 +1,17 @@
 //
-//  AsyncHttpTGClient.swift
+//  URLSessionTGClient.swift
 //  ReleaseInformerBot
 //
-//  Created by Sergei Armodin on 17.04.2025.
+//  Created by Sergei Armodin on 18.04.2025.
 //
 
-import Foundation
-import Vapor
-import SwiftTelegramSdk
 import Logging
-import Foundation
-import AsyncHTTPClient
+//import Hummingbird
 import SwiftTelegramSdk
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+import Foundation
 
 public enum TGHTTPMediaType: String, Equatable {
     case formData
@@ -20,16 +20,16 @@ public enum TGHTTPMediaType: String, Equatable {
 
 private struct TGEmptyParams: Encodable {}
 
-public final class AsyncHttpTGClient: TGClientPrtcl {
-
+public final class URLSessionTGClient: TGClientPrtcl {
+    
     public typealias HTTPMediaType = SwiftTelegramSdk.HTTPMediaType
-    public var log: Logger = .init(label: "AsyncHttpTGClient")
-    private let client: HTTPClient
-
-    public init(client: HTTPClient = .shared) {
-        self.client = client
+    public var log: Logging.Logger = .init(label: "URLSessionTGClient")
+    private let session: URLSession
+    
+    public init(session: URLSession = .shared) {
+        self.session = session
     }
-
+    
     @discardableResult
     public func post<Params: Encodable, Response: Decodable>(
         _ url: URL,
@@ -37,30 +37,41 @@ public final class AsyncHttpTGClient: TGClientPrtcl {
         as mediaType: HTTPMediaType? = nil
     ) async throws -> Response {
         let request = try makeRequest(url: url, params: params, as: mediaType)
-        let clientResponse = try await client.execute(request, timeout: .seconds(30))
-
-        guard clientResponse.status == .ok else {
-            throw BotError(type: .network, reason: "Invalid response status: \(clientResponse.status)")
+        
+        #if canImport(FoundationNetworking)
+            let (data, response): (Data, URLResponse) = await withCheckedContinuation { continuation in
+                URLSession.shared.dataTask(with: request) { data, response, _ in
+                    guard let data = data, let response = response else {
+                        fatalError()
+                    }
+                    continuation.resume(returning: (data, response))
+                }.resume()
+            }
+        #else
+            let (data, response) = try await session.data(for: request)
+        #endif
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw BotError(type: .network, reason: "Invalid response from server")
         }
-
-        let data = try await clientResponse.body.collect(upTo: 1024 * 1024) // 1 MB limit
+        
         let telegramContainer: TGTelegramContainer<Response> = try JSONDecoder().decode(TGTelegramContainer<Response>.self, from: data)
         return try processContainer(telegramContainer)
     }
-
+    
     @discardableResult
     public func post<Response: Decodable>(_ url: URL) async throws -> Response {
         try await post(url, params: TGEmptyParams(), as: nil)
     }
-
+    
     private func makeRequest<Params: Encodable>(
         url: URL,
         params: Params?,
         as mediaType: HTTPMediaType?
-    ) throws -> HTTPClientRequest {
-        var request: HTTPClientRequest = HTTPClientRequest(url: url.absoluteString)
-        request.method = .POST
-
+    ) throws -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        
         if mediaType == .formData || mediaType == nil {
             var rawMultipart: (body: NSMutableData, boundary: String)!
             do {
@@ -73,18 +84,18 @@ public final class AsyncHttpTGClient: TGClientPrtcl {
                 log.critical("Post request error: \(error.localizedDescription)")
                 throw error
             }
-            request.headers.add(name: "Content-Type", value: "multipart/form-data; boundary=\(rawMultipart.boundary)")
-            request.body = .bytes(rawMultipart.body as Data)
+            request.setValue("multipart/form-data; boundary=\(rawMultipart.boundary)", forHTTPHeaderField: "Content-Type")
+            request.httpBody = rawMultipart.body as Data
         } else {
-            request.headers.add(name: "Content-Type", value: "application/json")
-            let encoded: any Encodable = params ?? TGEmptyParams()
-            let data = try JSONEncoder().encode(encoded)
-            request.body = .bytes(data)
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            let encodable: Encodable = params ?? TGEmptyParams()
+            let data = try JSONEncoder().encode(encodable)
+            request.httpBody = data
         }
-
+        
         return request
     }
-
+    
     private func processContainer<T: Decodable>(_ container: TGTelegramContainer<T>) throws -> T {
         guard container.ok else {
             let desc = """
@@ -96,26 +107,26 @@ public final class AsyncHttpTGClient: TGClientPrtcl {
                 type: .server,
                 description: desc
             )
-            log.error("\(error)")
+            log.error(error.logMessage)
             throw error
         }
-
+        
         guard let result = container.result else {
             let error = BotError(
                 type: .server,
                 reason: "Response marked as `Ok`, but doesn't contain `result` field."
             )
-            log.error("\(error)")
+            log.error(error.logMessage)
             throw error
         }
-
+        
         let logString = """
         Response:
         Code: \(container.errorCode ?? 0)
         Status OK: \(container.ok)
         Description: \(container.description ?? "Empty")
         """
-        log.trace("\(logString)")
+        log.trace(logString.logMessage)
         return result
     }
 }
