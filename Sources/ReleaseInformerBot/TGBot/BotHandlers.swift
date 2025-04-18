@@ -48,7 +48,7 @@ final class BotHandlers {
             let searchResults = try await searchManager.search(byTitle: searchString)
             let message = Self.makeSearchResultsMessage(searchResults)
 
-            try await update.message?.reply(text: message, bot: bot)
+            try await update.message?.reply(text: message, bot: bot, parseMode: .html)
         })
     }
 
@@ -61,7 +61,7 @@ final class BotHandlers {
             let searchResults = try await searchManager.search(byBundleID: searchString)
             guard let result = searchResults.first else {
                 let message = Self.makeSearchResultsMessage([])
-                try await update.message?.reply(text: message, bot: bot)
+                try await update.message?.reply(text: message, bot: bot, parseMode: .html)
                 return
             }
 
@@ -138,10 +138,10 @@ private extension BotHandlers {
         var text = "Search results:\n\n"
 
         for result in results[0..<min(10, results.count)] {
-            text += result.title + "\n"
-            text += "Version: " + (result.version) + "\n"
+            text += "<b>" + result.title + "</b>\n"
+            text += "Version: <b>" + (result.version) + "</b>\n"
             text += "URL: " + result.url + "\n"
-            text += "Bundle ID: " + result.bundleID + "\n\n"
+            text += "Bundle ID: <b>" + result.bundleID + "</b>\n\n"
         }
 
         return text
