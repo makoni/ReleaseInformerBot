@@ -70,8 +70,53 @@ public actor SearchManager {
 		guard let data = bytes.readData(length: bytes.readableBytes) else {
 			throw SearchError.noData
 		}
-		return try JSONDecoder().decode(SearchResultResponse.self, from: data).results
+
+        guard var dataString = String(data: data, encoding: .utf8) else {
+            return []
+        }
+
+        dataString = processJSONString(dataString)
+
+        guard let correctedData = dataString.data(using: .utf8) else {
+            return []
+        }
+
+		return try JSONDecoder().decode(SearchResultResponse.self, from: correctedData).results
 	}
+
+    private func processJSONString(_ input: String) -> String {
+        var result = ""
+        var inString = false
+        var lastChar: Character?
+
+        for char in input {
+            if char == "\"" && lastChar != "\\" {
+                inString.toggle()
+            }
+
+            if inString {
+                // Escape control characters within strings
+                switch char {
+                case "\n": result.append("\\n")
+                case "\t": result.append("\\t")
+                case "\r": result.append("\\r")
+                case "\u{00A0}": result.append(" ")
+                default: result.append(char)
+                }
+            } else {
+                // Outside strings, just replace non-breaking spaces
+                if char == "\u{00A0}" {
+                    result.append(" ")
+                } else {
+                    result.append(char)
+                }
+            }
+
+            lastChar = char
+        }
+
+        return result
+    }
 
 	private func buildRequest(fromUrl url: String, withMethod method: HTTPMethod) throws -> HTTPClientRequest {
 		var headers = HTTPHeaders()
