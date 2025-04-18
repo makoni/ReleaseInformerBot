@@ -23,22 +23,22 @@ import Foundation
  */
 
 public struct SearchResult: Codable, Sendable {
-    public let title: String
-    public let bundleID: String
-    public let url: String
-    public let version: String
-    public let releaseNotes: String
+	public let title: String
+	public let bundleID: String
+	public let url: String
+	public let version: String
+	public let releaseNotes: String
 
-    enum CodingKeys: String, CodingKey {
-        case title = "trackCensoredName"
-        case bundleID = "bundleId"
-        case url = "trackViewUrl"
-        case version
-        case releaseNotes = "releaseNotes"
-    }
+	enum CodingKeys: String, CodingKey {
+		case title = "trackCensoredName"
+		case bundleID = "bundleId"
+		case url = "trackViewUrl"
+		case version
+		case releaseNotes = "releaseNotes"
+	}
 }
 
 public struct SearchResultResponse: Codable {
-    public let resultCount: Int
-    public let results: [SearchResult]
+	public let resultCount: Int
+	public let results: [SearchResult]
 }

@@ -26,96 +26,96 @@ let logger = Logger(label: "ReleaseWatcher")
 //}
 
 public actor ReleaseWatcher {
-    private let timer: DispatchSourceTimer
-    private var isRunning = false
-    private let dbManager: DBManager
-    private let searchManager = SearchManager()
+	private let timer: DispatchSourceTimer
+	private var isRunning = false
+	private let dbManager: DBManager
+	private let searchManager = SearchManager()
 
-    public weak var tgBot: TGBot?
+	public weak var tgBot: TGBot?
 
-    public init(dbManager: DBManager = DBManager()) {
-        self.dbManager = dbManager
+	public init(dbManager: DBManager = DBManager()) {
+		self.dbManager = dbManager
 
-        timer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
-        timer.schedule(deadline: .now(), repeating: .seconds(60*5))
-        timer.setEventHandler { [weak self] in
-            Task { [weak self] in
-                await self?.run()
-            }
-        }
-    }
+		timer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
+		timer.schedule(deadline: .now(), repeating: .seconds(60 * 5))
+		timer.setEventHandler { [weak self] in
+			Task { [weak self] in
+				await self?.run()
+			}
+		}
+	}
 
-    public func setBot(_ bot: TGBot?) {
-        self.tgBot = bot
-    }
+	public func setBot(_ bot: TGBot?) {
+		self.tgBot = bot
+	}
 
-    public func start() {
-        timer.resume()
-    }
+	public func start() {
+		timer.resume()
+	}
 
-    func run() async {
-        guard !isRunning else {
-            logger.info("Already running. Skipping this cycle.")
-            return
-        }
-        isRunning = true
-        defer { isRunning = false }
+	func run() async {
+		guard !isRunning else {
+			logger.info("Already running. Skipping this cycle.")
+			return
+		}
+		isRunning = true
+		defer { isRunning = false }
 
-        logger.info("Running...")
-        var subscriptions: [Subscription]
-        do {
-            subscriptions = try await dbManager.getAllSubscriptions()
+		logger.info("Running...")
+		var subscriptions: [Subscription]
+		do {
+			subscriptions = try await dbManager.getAllSubscriptions()
 
-            // for tests
-//            subscriptions = subscriptions.filter({ $0.bundleID == "org.videolan.vlc-ios" })
+			// for tests
+			// subscriptions = subscriptions.filter({ $0.bundleID == "org.videolan.vlc-ios" })
 
-            logger.info("Number of subscriptions to check: \(subscriptions.count)")
-            for subscription in subscriptions {
-                if subscription.chats.isEmpty {
-                    try await dbManager.deleteSubscription(subscription)
-                    logger.info("Deleted subscription for \(subscription.bundleID) as it has no active chats.")
-                    continue
-                }
+			logger.info("Number of subscriptions to check: \(subscriptions.count)")
+			for subscription in subscriptions {
+				if subscription.chats.isEmpty {
+					try await dbManager.deleteSubscription(subscription)
+					logger.info("Deleted subscription for \(subscription.bundleID) as it has no active chats.")
+					continue
+				}
 
-                try await Task.sleep(for: .seconds(1))
+				try await Task.sleep(for: .seconds(1))
 
-                logger.info("Checking subscription: \(subscription.bundleID) - \(subscription.title)")
+				logger.info("Checking subscription: \(subscription.bundleID) - \(subscription.title)")
 
-                guard let appData = try await searchManager.search(byBundleID: subscription.bundleID).first else {
-                    logger.error("App not found with Bundle ID: \(subscription.bundleID)")
-                    continue
-                }
-                guard !subscription.version.contains(appData.version) else {
-                    continue
-                }
+				guard let appData = try await searchManager.search(byBundleID: subscription.bundleID).first else {
+					logger.error("App not found with Bundle ID: \(subscription.bundleID)")
+					continue
+				}
+				guard !subscription.version.contains(appData.version) else {
+					continue
+				}
 
-                logger.info("New version \(appData.version) found for \(subscription.bundleID) - \(subscription.title).")
-                try await dbManager.addNewVersion(appData.version, forSubscription: subscription)
+				logger.info("New version \(appData.version) found for \(subscription.bundleID) - \(subscription.title).")
+				try await dbManager.addNewVersion(appData.version, forSubscription: subscription)
 
-                for chat in subscription.chats {
-                    logger.info("Sending notification to chat: \(chat)")
+				for chat in subscription.chats {
+					logger.info("Sending notification to chat: \(chat)")
 
-                    do {
-                        var text = "<b>New Version Released!</b>\n\n"
-                        text += "<b>\(appData.title)</b>\n"
-                        text += "Version: <b>\(appData.version)</b>\n"
-                        text += "URL: \(appData.url)\n"
-                        text += "<b>Bundle ID:</b> \(appData.bundleID)\n\n"
+					do {
+						var text = "<b>New Version Released!</b>\n\n"
+						text += "<b>\(appData.title)</b>\n"
+						text += "Version: <b>\(appData.version)</b>\n"
+						text += "URL: \(appData.url)\n"
+						text += "<b>Bundle ID:</b> \(appData.bundleID)\n\n"
 
-                        try await tgBot?.sendMessage(
-                            params: .init(chatId: .chat(chat), text: text, parseMode: .html)
-                        )
-                        logger.info("Notification sent to chat: \(chat)")
-                    } catch {
-                        logger.error("Failed to send notification to chat \(chat). Error: \(error)")
-                    }
+						try await tgBot?.sendMessage(
+							params: .init(chatId: .chat(chat), text: text, parseMode: .html)
+						)
+						logger.info("Notification sent to chat: \(chat)")
+					} catch {
+						logger.error("Failed to send notification to chat \(chat). Error: \(error)")
+					}
 
-                    try await Task.sleep(for: .seconds(1))
-                }
-            }
-        } catch {
-            logger.error("An error occurred during the run cycle: \(error)")
-            return
-        }
-    }
+					try await Task.sleep(for: .seconds(1))
+				}
+			}
+		} catch {
+			logger.error("An error occurred during the run cycle: \(error)")
+			return
+		}
+	}
 }
