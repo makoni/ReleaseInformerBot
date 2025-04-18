@@ -39,6 +39,20 @@ public actor DBManager {
         logger.info("\(result.bundleID) has been added to DB")
     }
 
+    public func unsubscribeFromNewVersions(_ result: SearchResult, forChatID chatID: Int64) async throws {
+        guard var subscription = try await self.searchByBundleID(result.bundleID) else { return }
+
+        if subscription.chats.contains(chatID) {
+            subscription.chats.remove(chatID)
+
+            if !subscription.chats.isEmpty {
+                _ = try await couchDBClient.update(dbName: db, doc: subscription)
+            } else {
+                _ = try await couchDBClient.delete(fromDb: db, doc: subscription)
+            }
+        }
+    }
+
     func searchByBundleID(_ bundleID: String) async throws -> Subscription? {
         let response = try await couchDBClient.get(
             fromDB: db,

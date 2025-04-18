@@ -19,6 +19,7 @@ final class BotHandlers {
         await list(bot: bot)
         await search(bot: bot)
         await add(bot: bot)
+        await del(bot: bot)
         await commandShowButtonsHandler(bot: bot)
         await buttonsActionHandler(bot: bot)
     }
@@ -48,6 +49,26 @@ final class BotHandlers {
             let searchResults = try await searchManager.search(byTitle: searchString)
             let message = Self.makeSearchResultsMessage(searchResults)
 
+            try await update.message?.reply(text: message, bot: bot, parseMode: .html)
+        })
+    }
+
+    private static func del(bot: TGBot) async {
+        await bot.dispatcher.add(TGCommandHandler(commands: ["/del"]) { update in
+            guard let chatID = update.message?.chat.id else { return }
+            guard var searchString = update.message?.text else { return }
+            searchString = String(searchString.dropFirst("/del".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+
+            let searchResults = try await searchManager.search(byBundleID: searchString)
+            guard let result = searchResults.first else {
+                let message = Self.makeSearchResultsMessage([])
+                try await update.message?.reply(text: message, bot: bot, parseMode: .html)
+                return
+            }
+
+            try await dbManager.unsubscribeFromNewVersions(result, forChatID: chatID)
+
+            let message = "<b>\(result.title)</b> with bundle ID <b>\(result.bundleID)</b> has been removed from your subscriptions."
             try await update.message?.reply(text: message, bot: bot, parseMode: .html)
         })
     }
