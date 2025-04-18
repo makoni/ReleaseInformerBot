@@ -114,3 +114,32 @@ public actor DBManager {
         return subscriptions
     }
 }
+
+// MARK: - Watcher methods
+extension DBManager {
+    public func getAllSubscriptions() async throws -> [Subscription] {
+        let response = try await couchDBClient.get(
+            fromDB: db,
+            uri: "_design/list/_view/by_bundle"
+        )
+
+        let expectedBytes =
+            response.headers
+            .first(name: "content-length")
+            .flatMap(Int.init) ?? 1024 * 1024 * 10
+        var bytes = try await response.body.collect(upTo: expectedBytes)
+
+        guard let data = bytes.readData(length: bytes.readableBytes) else {
+            logger.error("Could not read response")
+            return []
+        }
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(
+            RowsResponse<Subscription>.self,
+            from: data
+        )
+
+        return decoded.rows.map({ $0.value })
+    }
+}
