@@ -41,7 +41,7 @@ public actor ReleaseWatcher {
 		self.dbManager = dbManager
 
 		timer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
-        appCheckTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
+        appCheckTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
 
 		timer.schedule(deadline: .now(), repeating: .seconds(60 * 5))
 		timer.setEventHandler { [weak self] in
