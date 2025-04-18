@@ -98,7 +98,7 @@ public actor ReleaseWatcher {
                     logger.info("Sending notification to chat: \(chat)")
 
                     do {
-                        var text = "New version released!\n\n"
+                        var text = "<b>New Version Released!</b>\n\n"
                         text += "<b>\(appData.title)</b>\n"
                         text += "Version: <b>\(appData.version)</b>\n"
                         text += "URL: \(appData.url)\n"
