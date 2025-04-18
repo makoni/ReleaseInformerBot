@@ -64,9 +64,12 @@ public actor ReleaseWatcher {
         defer { isRunning = false }
 
         print("running")
-        let subscriptions: [Subscription]
+        var subscriptions: [Subscription]
         do {
             subscriptions = try await dbManager.getAllSubscriptions()
+
+            // for tests
+//            subscriptions = subscriptions.filter({ $0.bundleID == "org.videolan.vlc-ios" })
 
             logger.info("Subscriptions to check: \(subscriptions.count)")
             for subscription in subscriptions {
@@ -88,6 +91,27 @@ public actor ReleaseWatcher {
                 }
 
                 logger.info("New version \(appData.version) found for \(subscription.bundleID) - \(subscription.title)")
+                try await dbManager.addNewVersion(appData.version, forSubscription: subscription)
+
+                for chat in subscription.chats {
+                    logger.info("Sending message to chat: \(chat)")
+
+                    do {
+                        var text = "New version released!\n\n"
+                        text += "<b>\(appData.title)</b>\n"
+                        text += "Version: <b>\(appData.version)</b>\n"
+                        text += "URL: \(appData.url)\n"
+                        text += "<b>Bundle ID:</b> \(appData.bundleID)\n\n"
+
+                        try await tgBot?.sendMessage(
+                            params: .init(chatId: .chat(chat), text: text, parseMode: .html)
+                        )
+                    } catch {
+                        logger.error("Could not send message. Error: \(error)")
+                    }
+
+                    try await Task.sleep(for: .seconds(1))
+                }
             }
         } catch {
             logger.error("Error happened: \(error)")

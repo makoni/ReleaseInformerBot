@@ -153,4 +153,14 @@ extension DBManager {
 
         return decoded.rows.map({ $0.value })
     }
+
+    public func addNewVersion(_ version: String, forSubscription doc: Subscription) async throws {
+        var subscription = doc
+        subscription.version.append(version)
+        while subscription.version.count > 5 {
+            subscription.version.removeFirst()
+        }
+
+        _ = try await couchDBClient.update(dbName: db, doc: subscription)
+    }
 }
