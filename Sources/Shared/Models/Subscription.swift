@@ -6,9 +6,10 @@
 //
 
 import CouchDBClient
+import Foundation
 
 public struct Subscription: CouchDBRepresentable {
-    internal init(_id: String, _rev: String? = nil, bundleId: String, url: String, title: String, version: [String], chats: [Int64]) {
+    internal init(_id: String = NSUUID().uuidString, _rev: String? = nil, bundleId: String, url: String, title: String, version: [String], chats: [Int64]) {
         self._id = _id
         self._rev = _rev
         self.bundleId = bundleId
