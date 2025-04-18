@@ -2,3 +2,4 @@ node_modules
 launch.txt
 **/.DS_Store
 .swiftpm
+.build
