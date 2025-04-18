@@ -18,10 +18,6 @@ fileprivate let couchDBClient = CouchDBClient(
 fileprivate let logger = Logger(label: "DBManager")
 
 public actor DBManager {
-	public enum DBManagerError: Error {
-		case chatsNotEmpty
-	}
-
 	public init() {}
 
 	private let db = "release_bot"
@@ -65,9 +61,6 @@ public actor DBManager {
 	}
 
 	public func deleteSubscription(_ subscription: Subscription) async throws {
-		guard subscription.chats.isEmpty else {
-			throw DBManagerError.chatsNotEmpty
-		}
 		_ = try await couchDBClient.delete(fromDb: db, doc: subscription)
 		logger.info("Subscription for \(subscription.bundleID) has been deleted from the database.")
 	}
