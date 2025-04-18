@@ -1,5 +1,5 @@
 {
-  "originHash" : "d2b3cd4a55b1e3fff92abc27cf11d813a9472ea991239b5ee735c43ca4d37fbb",
+  "originHash" : "4dd520b87c433e5f93b8bee1009ec1c3eb6eea86c164e2005051e619bc9ea1ba",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -139,7 +139,7 @@
     {
       "identity" : "swift-log",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-log.git",
+      "location" : "https://github.com/apple/swift-log",
       "state" : {
         "revision" : "3d8596ed08bd13520157f0355e35caed215ffbfa",
         "version" : "1.6.3"
@@ -238,10 +238,10 @@
     {
       "identity" : "swift-telegram-sdk",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/nerzh/swift-telegram-sdk",
+      "location" : "https://github.com/nerzh/swift-telegram-sdk.git",
       "state" : {
-        "revision" : "66415e68a98d23eca279502e74a79c62099f8e5c",
-        "version" : "3.8.0"
+        "revision" : "b813d1699706986612802be866bc3dd1079ce557",
+        "version" : "3.9.1"
       }
     },
     {
