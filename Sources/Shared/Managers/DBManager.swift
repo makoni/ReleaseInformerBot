@@ -36,6 +36,7 @@ public actor DBManager {
         // add new one
         let subscription = Subscription(bundleId: result.bundleID, url: result.url, title: result.title, version: [result.version], chats: [chatID])
         _ = try await couchDBClient.insert(dbName: db, doc: subscription)
+        logger.info("\(result.bundleID) has been added to DB")
     }
 
     func searchByBundleID(_ bundleID: String) async throws -> Subscription? {
@@ -58,16 +59,11 @@ public actor DBManager {
             return nil
         }
 
-        let responseString = String(data: data, encoding: .utf8)!
-        logger.info("response: \(responseString)")
-
         let decoder = JSONDecoder()
         let subscriptions = try decoder.decode(
             RowsResponse<Subscription>.self,
             from: data
         ).rows.map({ $0.value })
-
-        logger.info("Found docs for bundleID: \(subscriptions.count)")
 
         return subscriptions.first
     }

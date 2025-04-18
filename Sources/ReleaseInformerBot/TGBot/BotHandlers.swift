@@ -36,7 +36,7 @@ final class BotHandlers {
             let subscriptions = try await dbManager.search(byChatID: chatID)
             let message = Self.makeListMessage(subscriptions)
 
-            try await update.message?.reply(text: message, bot: bot)
+            try await update.message?.reply(text: message, bot: bot, parseMode: .html)
         })
     }
 
@@ -152,13 +152,13 @@ private extension BotHandlers {
             return "You are not subscribed to any apps updates."
         }
 
-        var text = "Results:\n\n"
+        var text = "Subscriptions:\n\n"
 
         for subscription in subscriptions {
-            text += subscription.title + "\n"
-            text += "Version: " + (subscription.version.last ?? "") + "\n"
+            text += "<b>" + subscription.title + "</b>\n"
+            text += "Version: <b>" + (subscription.version.last ?? "") + "</b>\n"
             text += "URL: " + subscription.url + "\n"
-            text += "Bundle ID: " + subscription.bundleId + "\n\n"
+            text += "Bundle ID: <b>" + subscription.bundleId + "</b>\n\n"
         }
 
         return text
