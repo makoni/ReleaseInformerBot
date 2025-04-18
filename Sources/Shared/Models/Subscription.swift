@@ -50,10 +50,10 @@ public struct Subscription: CouchDBRepresentable {
         self.url = try container.decode(String.self, forKey: .url)
         self.title = try container.decode(String.self, forKey: .title)
 
-        let version = try container.decodeIfPresent([String].self, forKey: .version)
-        if let version {
+        do {
+            let version = try container.decode([String].self, forKey: .version)
             self.version = version
-        } else {
+        } catch {
             let versionString = try container.decodeIfPresent(String.self, forKey: .version)
             self.version = versionString == nil ? [] : [versionString!]
         }
