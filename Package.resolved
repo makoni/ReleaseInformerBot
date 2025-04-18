@@ -105,8 +105,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/nerzh/swift-custom-logger",
       "state" : {
-        "revision" : "b76cd97634c3d23348f041ca161187dac8bf6fe3",
-        "version" : "1.1.0"
+        "revision" : "5eea143e6674a7a263b96cdf51e4db8bad07820c",
+        "version" : "1.1.1"
       }
     },
     {
