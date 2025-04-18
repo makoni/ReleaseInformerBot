@@ -110,7 +110,7 @@ public actor ReleaseWatcher {
 						logger.error("Failed to send notification to chat \(chat). Error: \(error)")
 					}
 
-					try await Task.sleep(for: .seconds(1))
+					try await Task.sleep(for: .seconds(2))
 				}
 			}
 		} catch {
