@@ -9,7 +9,7 @@ import CouchDBClient
 import Foundation
 
 public struct Subscription: CouchDBRepresentable {
-    internal init(_id: String = NSUUID().uuidString, _rev: String? = nil, bundleId: String, url: String, title: String, version: [String], chats: [Int64]) {
+    internal init(_id: String = NSUUID().uuidString, _rev: String? = nil, bundleId: String, url: String, title: String, version: [String], chats: Set<Int64>) {
         self._id = _id
         self._rev = _rev
         self.bundleId = bundleId
@@ -30,7 +30,7 @@ public struct Subscription: CouchDBRepresentable {
     public var url: String
     public var title: String
     public var version: [String]
-    public var chats: [Int64]
+    public var chats: Set<Int64>
 
     enum CodingKeys: String, CodingKey {
         case _id
@@ -58,6 +58,6 @@ public struct Subscription: CouchDBRepresentable {
             self.version = versionString == nil ? [] : [versionString!]
         }
 
-        self.chats = try container.decode([Int64].self, forKey: .chats)
+        self.chats = try container.decode(Set<Int64>.self, forKey: .chats)
     }
 }
