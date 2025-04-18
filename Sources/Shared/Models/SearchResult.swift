@@ -22,12 +22,12 @@ import Foundation
  }
  */
 
-struct SearchResult: Codable {
-    let title: String
-    let bundleId: String
-    let url: String
-    let version: String
-    let releaseNotes: String
+public struct SearchResult: Codable, Sendable {
+    public let title: String
+    public let bundleId: String
+    public let url: String
+    public let version: String
+    public let releaseNotes: String
 
     enum CodingKeys: String, CodingKey {
         case title = "trackCensoredName"
@@ -38,7 +38,7 @@ struct SearchResult: Codable {
     }
 }
 
-struct SearchResultResponse: Codable {
-    let resultCount: Int
-    let results: [SearchResult]
+public struct SearchResultResponse: Codable {
+    public let resultCount: Int
+    public let results: [SearchResult]
 }

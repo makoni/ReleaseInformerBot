@@ -9,13 +9,21 @@ import Foundation
 import CouchDBClient
 import Logging
 
-fileprivate let couchDBClient = CouchDBClient(config: config)
+
+fileprivate let couchDBClient = CouchDBClient(
+    config: CouchDBClient.Config(
+        userName: "admin"
+    )
+)
+
 fileprivate let logger = Logger(label: "DBManager")
 
-actor DBManager {
+public actor DBManager {
+    public init() {}
+    
     private let db = "release_bot"
 
-    func search(byChatID chatID: Int64) async throws -> [Subscription] {
+    public func search(byChatID chatID: Int64) async throws -> [Subscription] {
         let response = try await couchDBClient.get(
             fromDB: db,
             uri: "_design/list/_view/by_chat",

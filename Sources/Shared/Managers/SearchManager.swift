@@ -12,7 +12,7 @@ import NIOHTTP1
 
 fileprivate let logger = Logger(label: "SearchManager")
 
-actor SearchManager {
+public actor SearchManager {
     enum SearchError: Error {
         case noData
     }
@@ -24,11 +24,13 @@ actor SearchManager {
         case bundleId(bundleId: String)
     }
 
-    func search(byTitle title: String) async throws -> [SearchResult] {
+    public init() {}
+
+    public func search(byTitle title: String) async throws -> [SearchResult] {
         return try await search(byType: .title(title: title))
     }
 
-    func search(byBundleID bundleID: String) async throws -> [SearchResult] {
+    public func search(byBundleID bundleID: String) async throws -> [SearchResult] {
         return try await search(byType: .bundleId(bundleId: bundleID))
     }
 

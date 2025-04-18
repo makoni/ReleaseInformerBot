@@ -15,6 +15,12 @@ let package = Package(
         .package(url: "https://github.com/makoni/couchdb-swift.git", from: "2.1.0"),
     ],
     targets: [
+        .target(
+            name: "Shared",
+            dependencies: [
+                .product(name: "CouchDBClient", package: "couchdb-swift"),
+            ]
+        ),
         .executableTarget(
             name: "ReleaseInformerBot",
             dependencies: [
@@ -22,21 +28,15 @@ let package = Package(
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "SwiftTelegramSdk", package: "swift-telegram-sdk"),
-                .product(name: "CouchDBClient", package: "couchdb-swift"),
-            ],
-            swiftSettings: swiftSettings
+                .target(name: "Shared")
+            ]
         ),
         .testTarget(
             name: "ReleaseInformerBotTests",
             dependencies: [
                 .target(name: "ReleaseInformerBot"),
                 .product(name: "VaporTesting", package: "vapor"),
-            ],
-            swiftSettings: swiftSettings
+            ]
         )
     ]
 )
-
-var swiftSettings: [SwiftSetting] { [
-    .enableUpcomingFeature("ExistentialAny"),
-] }

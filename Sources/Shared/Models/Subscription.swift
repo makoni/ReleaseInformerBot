@@ -7,7 +7,7 @@
 
 import CouchDBClient
 
-struct Subscription: CouchDBRepresentable {
+public struct Subscription: CouchDBRepresentable {
     internal init(_id: String, _rev: String? = nil, bundleId: String, url: String, title: String, version: [String], chats: [Int64]) {
         self._id = _id
         self._rev = _rev
@@ -18,18 +18,18 @@ struct Subscription: CouchDBRepresentable {
         self.chats = chats
     }
     
-    var _id: String
-    var _rev: String?
+    public var _id: String
+    public var _rev: String?
 
-    func updateRevision(_ newRevision: String) -> Subscription {
+    public func updateRevision(_ newRevision: String) -> Subscription {
         return .init(_id: _id, _rev: newRevision, bundleId: bundleId, url: url, title: title, version: version, chats: chats)
     }
 
-    var bundleId: String
-    var url: String
-    var title: String
-    var version: [String]
-    var chats: [Int64]
+    public var bundleId: String
+    public var url: String
+    public var title: String
+    public var version: [String]
+    public var chats: [Int64]
 
     enum CodingKeys: String, CodingKey {
         case _id
@@ -41,7 +41,7 @@ struct Subscription: CouchDBRepresentable {
         case chats
     }
 
-    init(from decoder: any Decoder) throws {
+    public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self._id = try container.decode(String.self, forKey: ._id)
         self._rev = try container.decodeIfPresent(String.self, forKey: ._rev)

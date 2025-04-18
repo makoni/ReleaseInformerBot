@@ -1,5 +1,5 @@
 import Vapor
-import CouchDBClient
+import Shared
 @preconcurrency import SwiftTelegramSdk
 
 // configures your application
@@ -24,10 +24,6 @@ public func configure(_ app: Application) async throws {
     // register routes
     try routes(app)
 }
-
-let config = CouchDBClient.Config(
-    userName: "admin"
-)
 
 let dbManager = DBManager()
 let searchManager = SearchManager()

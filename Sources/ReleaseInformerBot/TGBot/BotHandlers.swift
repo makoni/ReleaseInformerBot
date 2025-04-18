@@ -7,6 +7,7 @@
 
 import Vapor
 import CouchDBClient
+import Shared
 @preconcurrency import SwiftTelegramSdk
 
 final class BotHandlers {
