@@ -35,7 +35,6 @@ public actor SearchManager {
     }
 
     private func search(byType searchType: SearchType) async throws -> [SearchResult] {
-        // const searchString = 'https://itunes.apple.com/search?term=' + encodeURI(searchText.trim()) + '&entity=software';
         var urlBuilder = URLComponents()
         urlBuilder.scheme = "https"
         urlBuilder.host = "itunes.apple.com"
