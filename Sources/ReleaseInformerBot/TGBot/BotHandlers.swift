@@ -10,26 +10,30 @@ import CouchDBClient
 import Shared
 @preconcurrency import SwiftTelegramSdk
 
+let dbManager = DBManager()
+let searchManager = SearchManager()
+
 final class BotHandlers {
     static func addHandlers(bot: TGBot) async {
         await help(bot: bot)
         await list(bot: bot)
         await search(bot: bot)
+        await add(bot: bot)
         await commandShowButtonsHandler(bot: bot)
         await buttonsActionHandler(bot: bot)
     }
 
     private static func help(bot: TGBot) async {
         await bot.dispatcher.add(TGCommandHandler(commands: ["/help"]) { update in
-            try await update.message?.reply(text: Self.helpText, bot: bot)
+            try await update.message?.reply(text: Self.helpText, bot: bot, parseMode: .html)
         })
     }
 
     private static func list(bot: TGBot) async {
         await bot.dispatcher.add(TGCommandHandler(commands: ["/list"]) { update in
-            guard let fromId = update.message?.chat.id else { return }
+            guard let chatID = update.message?.chat.id else { return }
 
-            let subscriptions = try await dbManager.search(byChatID: fromId)
+            let subscriptions = try await dbManager.search(byChatID: chatID)
             let message = Self.makeListMessage(subscriptions)
 
             try await update.message?.reply(text: message, bot: bot)
@@ -45,6 +49,26 @@ final class BotHandlers {
             let message = Self.makeSearchResultsMessage(searchResults)
 
             try await update.message?.reply(text: message, bot: bot)
+        })
+    }
+
+    private static func add(bot: TGBot) async {
+        await bot.dispatcher.add(TGCommandHandler(commands: ["/add"]) { update in
+            guard let chatID = update.message?.chat.id else { return }
+            guard var searchString = update.message?.text else { return }
+            searchString = String(searchString.dropFirst("/add".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+
+            let searchResults = try await searchManager.search(byBundleID: searchString)
+            guard let result = searchResults.first else {
+                let message = Self.makeSearchResultsMessage([])
+                try await update.message?.reply(text: message, bot: bot)
+                return
+            }
+
+            try await dbManager.subscribeForNewVersions(result, forChatID: chatID)
+
+            let message = "<b>\(result.title)</b> with bundle ID <b>\(result.bundleID)</b> has been added to your subscriptions. I will inform you when a new version will be released."
+            try await update.message?.reply(text: message, bot: bot, parseMode: .html)
         })
     }
 
@@ -100,10 +124,10 @@ private extension BotHandlers {
         /list - list of subscribtions
         
         Examples:
-        /search GMail
-        /add com.google.Gmail
-        /del com.google.Gmail
-        /list
+        <pre>/search GMail</pre>
+        <pre>/add com.google.Gmail</pre>
+        <pre>/del com.google.Gmail</pre>
+        <pre>/list</pre>
         """
 
     static func makeSearchResultsMessage(_ results: [SearchResult]) -> String {
@@ -117,7 +141,7 @@ private extension BotHandlers {
             text += result.title + "\n"
             text += "Version: " + (result.version) + "\n"
             text += "URL: " + result.url + "\n"
-            text += "Bundle ID: " + result.bundleId + "\n\n"
+            text += "Bundle ID: " + result.bundleID + "\n\n"
         }
 
         return text

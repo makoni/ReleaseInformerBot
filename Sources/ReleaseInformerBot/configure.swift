@@ -24,6 +24,3 @@ public func configure(_ app: Application) async throws {
     // register routes
     try routes(app)
 }
-
-let dbManager = DBManager()
-let searchManager = SearchManager()
