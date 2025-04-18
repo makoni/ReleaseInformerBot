@@ -27,9 +27,14 @@ let logger = Logger(label: "ReleaseWatcher")
 
 public actor ReleaseWatcher {
 	private let timer: DispatchSourceTimer
+
+    @MainActor
+    private var appCheckTimer: Timer?
 	private var isRunning = false
 	private let dbManager: DBManager
 	private let searchManager = SearchManager()
+    
+    private var queue = [Subscription]()
 
 	public weak var tgBot: TGBot?
 
@@ -37,9 +42,11 @@ public actor ReleaseWatcher {
 		self.dbManager = dbManager
 
 		timer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
+
 		timer.schedule(deadline: .now(), repeating: .seconds(60 * 5))
 		timer.setEventHandler { [weak self] in
 			Task { [weak self] in
+                guard await self?.queue.isEmpty == true else { return }
 				await self?.run()
 			}
 		}
@@ -49,9 +56,65 @@ public actor ReleaseWatcher {
 		self.tgBot = bot
 	}
 
-	public func start() {
+    public func start() async {
 		timer.resume()
+
+        await MainActor.run {
+            appCheckTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true, block: { _ in
+                Task {
+                    try await self.handleSubscription()
+                }
+            })
+        }
 	}
+
+    func handleSubscription() async throws {
+        guard queue.isEmpty == false else { return }
+        let subscription = self.queue.removeFirst()
+
+        if subscription.chats.isEmpty {
+            try await dbManager.deleteSubscription(subscription)
+            logger.info("Deleted subscription for \(subscription.bundleID) as it has no active chats.")
+            return
+        }
+
+        try await Task.sleep(for: .seconds(2))
+
+        logger.info("Checking subscription: \(subscription.bundleID) - \(subscription.title)")
+
+        guard let appData = try await self.searchManager.search(byBundleID: subscription.bundleID).first else {
+            logger.error("App not found with Bundle ID: \(subscription.bundleID)")
+            try await dbManager.deleteSubscription(subscription)
+            return
+        }
+        guard !subscription.version.contains(appData.version) else {
+            return
+        }
+
+        logger.info("New version \(appData.version) found for \(subscription.bundleID) - \(subscription.title).")
+        try await dbManager.addNewVersion(appData.version, forSubscription: subscription)
+
+        for chat in subscription.chats {
+            logger.info("Sending notification to chat: \(chat)")
+
+            do {
+                var text = "<b>New Version Released!</b>\n\n"
+                text += "<b>\(appData.title)</b>\n"
+                text += "Version: <b>\(appData.version)</b>\n"
+                text += "URL: \(appData.url)\n"
+                text += "<b>Bundle ID:</b> \(appData.bundleID)\n\n"
+
+                try await self.tgBot?.sendMessage(
+                    params: .init(chatId: .chat(chat), text: text, parseMode: .html)
+                )
+                logger.info("Notification sent to chat: \(chat)")
+            } catch {
+                logger.error("Failed to send notification to chat \(chat). Error: \(error)")
+            }
+
+            try await Task.sleep(for: .seconds(2))
+        }
+    }
 
 	func run() async {
 		guard !isRunning else {
@@ -62,58 +125,13 @@ public actor ReleaseWatcher {
 		defer { isRunning = false }
 
 		logger.info("Running...")
-		var subscriptions: [Subscription]
 		do {
-			subscriptions = try await dbManager.getAllSubscriptions()
+			queue = try await dbManager.getAllSubscriptions()
 
 			// for tests
-			 //subscriptions = subscriptions.filter({ $0.bundleID == "com.google.chrome.ios" })
+            // subscriptions = subscriptions.filter({ $0.bundleID.contains("com.google") })
 
-			logger.info("Number of subscriptions to check: \(subscriptions.count)")
-			for subscription in subscriptions {
-				if subscription.chats.isEmpty {
-					try await dbManager.deleteSubscription(subscription)
-					logger.info("Deleted subscription for \(subscription.bundleID) as it has no active chats.")
-					continue
-				}
-
-				try await Task.sleep(for: .seconds(2))
-
-				logger.info("Checking subscription: \(subscription.bundleID) - \(subscription.title)")
-
-				guard let appData = try await searchManager.search(byBundleID: subscription.bundleID).first else {
-					logger.error("App not found with Bundle ID: \(subscription.bundleID)")
-                    try await dbManager.deleteSubscription(subscription)
-					continue
-				}
-				guard !subscription.version.contains(appData.version) else {
-					continue
-				}
-
-				logger.info("New version \(appData.version) found for \(subscription.bundleID) - \(subscription.title).")
-				try await dbManager.addNewVersion(appData.version, forSubscription: subscription)
-
-				for chat in subscription.chats {
-					logger.info("Sending notification to chat: \(chat)")
-
-					do {
-						var text = "<b>New Version Released!</b>\n\n"
-						text += "<b>\(appData.title)</b>\n"
-						text += "Version: <b>\(appData.version)</b>\n"
-						text += "URL: \(appData.url)\n"
-						text += "<b>Bundle ID:</b> \(appData.bundleID)\n\n"
-
-						try await tgBot?.sendMessage(
-							params: .init(chatId: .chat(chat), text: text, parseMode: .html)
-						)
-						logger.info("Notification sent to chat: \(chat)")
-					} catch {
-						logger.error("Failed to send notification to chat \(chat). Error: \(error)")
-					}
-
-					try await Task.sleep(for: .seconds(2))
-				}
-			}
+			logger.info("Number of subscriptions to check: \(queue.count)")
 		} catch {
 			logger.error("An error occurred during the run cycle: \(error)")
 			return
