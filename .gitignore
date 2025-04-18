@@ -4,3 +4,4 @@ launch.txt
 .swiftpm
 .build
 .vscode
+deploy.sh
