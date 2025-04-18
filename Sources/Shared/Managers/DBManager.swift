@@ -19,6 +19,10 @@ fileprivate let couchDBClient = CouchDBClient(
 fileprivate let logger = Logger(label: "DBManager")
 
 public actor DBManager {
+    public enum DBManagerError: Error {
+        case chatsNotEmpty
+    }
+
     public init() {}
     
     private let db = "release_bot"
@@ -46,16 +50,23 @@ public actor DBManager {
             subscription.chats.remove(chatID)
 
             if !subscription.chats.isEmpty {
-                _ = try await couchDBClient.update(dbName: db, doc: subscription)
+                subscription = try await couchDBClient.update(dbName: db, doc: subscription)
             } else {
-                _ = try await couchDBClient.delete(fromDb: db, doc: subscription)
+                try await deleteSubscription(subscription)
             }
         }
 
         return subscription
     }
 
-    func searchByBundleID(_ bundleID: String) async throws -> Subscription? {
+    public func deleteSubscription(_ subscription: Subscription) async throws {
+        guard subscription.chats.isEmpty else {
+            throw DBManagerError.chatsNotEmpty
+        }
+        _ = try await couchDBClient.delete(fromDb: db, doc: subscription)
+    }
+
+    private func searchByBundleID(_ bundleID: String) async throws -> Subscription? {
         let response = try await couchDBClient.get(
             fromDB: db,
             uri: "_design/list/_view/by_bundle",

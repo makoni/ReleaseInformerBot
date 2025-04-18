@@ -31,6 +31,13 @@ let package = Package(
                 .target(name: "Shared")
             ]
         ),
+        .executableTarget(
+            name: "ReleaseWatcher",
+            dependencies: [
+                .product(name: "SwiftTelegramSdk", package: "swift-telegram-sdk"),
+                .target(name: "Shared")
+            ]
+        ),
         .testTarget(
             name: "ReleaseInformerBotTests",
             dependencies: [
