@@ -43,7 +43,6 @@ public actor ReleaseWatcher {
                 await self?.run()
             }
         }
-        print("init")
     }
 
     public func setBot(_ bot: TGBot?) {
@@ -55,15 +54,14 @@ public actor ReleaseWatcher {
     }
 
     func run() async {
-        print("Run called")
         guard !isRunning else {
-            print("Already running. Skipping this cycle.")
+            logger.info("Already running. Skipping this cycle.")
             return
         }
         isRunning = true
         defer { isRunning = false }
 
-        print("Running...")
+        logger.info("Running...")
         var subscriptions: [Subscription]
         do {
             subscriptions = try await dbManager.getAllSubscriptions()
