@@ -67,7 +67,7 @@ public actor ReleaseWatcher {
 			subscriptions = try await dbManager.getAllSubscriptions()
 
 			// for tests
-			// subscriptions = subscriptions.filter({ $0.bundleID == "org.videolan.vlc-ios" })
+			 //subscriptions = subscriptions.filter({ $0.bundleID == "com.google.chrome.ios" })
 
 			logger.info("Number of subscriptions to check: \(subscriptions.count)")
 			for subscription in subscriptions {
@@ -77,7 +77,7 @@ public actor ReleaseWatcher {
 					continue
 				}
 
-				try await Task.sleep(for: .seconds(1))
+				try await Task.sleep(for: .seconds(2))
 
 				logger.info("Checking subscription: \(subscription.bundleID) - \(subscription.title)")
 
