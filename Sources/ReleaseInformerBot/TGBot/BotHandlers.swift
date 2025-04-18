@@ -159,14 +159,14 @@ private extension BotHandlers {
     static let helpText = """
         Help: 
         
-        /help - help.
-        /search [app name] - search app by name.
-        /add [bundle ID] - subscribe for notifications about new versions of app by Bundle ID (you can find it with /search).
-        /del [bundle ID]- unsubscribe from notifications about new versions by Bundle ID.
-        /list - list of subscribtions
+        /help - Display this help message.
+        /search [app name] - Search for an app by name.
+        /add [bundle ID] - Subscribe to notifications for new versions of an app using its Bundle ID (you can find it with /search).
+        /del [bundle ID] - Unsubscribe from notifications for new versions using the Bundle ID.
+        /list - Show your list of subscriptions.
         
         Examples:
-        <pre>/search GMail</pre>
+        <pre>/search Gmail</pre>
         <pre>/add com.google.Gmail</pre>
         <pre>/del com.google.Gmail</pre>
         <pre>/list</pre>
@@ -174,16 +174,16 @@ private extension BotHandlers {
 
     static func makeSearchResultsMessage(_ results: [SearchResult]) -> String {
         if results.isEmpty {
-            return "Nothing found in App Store."
+            return "No results found in the App Store."
         }
 
-        var text = "Search results:\n\n"
+        var text = "Search Results:\n\n"
 
         for result in results[0..<min(10, results.count)] {
-            text += "<b>" + result.title + "</b>\n"
-            text += "Version: <b>" + (result.version) + "</b>\n"
-            text += "URL: " + result.url + "\n"
-            text += "Bundle ID: <b>" + result.bundleID + "</b>\n\n"
+            text += "<b>\(result.title)</b>\n"
+            text += "Version: <b>\(result.version)</b>\n"
+            text += "URL: \(result.url)\n"
+            text += "Bundle ID: <b>\(result.bundleID)</b>\n\n"
         }
 
         return text
@@ -191,16 +191,16 @@ private extension BotHandlers {
 
     static func makeListMessage(_ subscriptions: [Subscription]) -> String {
         if subscriptions.isEmpty {
-            return "You are not subscribed to any apps updates."
+            return "You are not subscribed to updates for any apps."
         }
 
-        var text = "Subscriptions:\n\n"
+        var text = "Your Subscriptions:\n\n"
 
         for subscription in subscriptions {
-            text += "<b>" + subscription.title + "</b>\n"
-            text += "Version: <b>" + (subscription.version.last ?? "") + "</b>\n"
-            text += "URL: " + subscription.url + "\n"
-            text += "Bundle ID: <b>" + subscription.bundleID + "</b>\n\n"
+            text += "<b>\(subscription.title)</b>\n"
+            text += "Latest Version: <b>\(subscription.version.last ?? "N/A")</b>\n"
+            text += "URL: \(subscription.url)\n"
+            text += "Bundle ID: <b>\(subscription.bundleID)</b>\n\n"
         }
 
         return text
