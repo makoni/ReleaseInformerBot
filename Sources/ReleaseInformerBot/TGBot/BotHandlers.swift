@@ -11,7 +11,6 @@ import Shared
 import Logging
 @preconcurrency import SwiftTelegramSdk
 
-let dbManager = DBManager()
 let searchManager = SearchManager()
 
 final class BotHandlers {

@@ -21,6 +21,13 @@ let package = Package(
                 .product(name: "CouchDBClient", package: "couchdb-swift"),
             ]
         ),
+        .target(
+            name: "ReleaseWatcher",
+            dependencies: [
+                .product(name: "SwiftTelegramSdk", package: "swift-telegram-sdk"),
+                .target(name: "Shared")
+            ]
+        ),
         .executableTarget(
             name: "ReleaseInformerBot",
             dependencies: [
@@ -28,14 +35,8 @@ let package = Package(
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "SwiftTelegramSdk", package: "swift-telegram-sdk"),
-                .target(name: "Shared")
-            ]
-        ),
-        .executableTarget(
-            name: "ReleaseWatcher",
-            dependencies: [
-                .product(name: "SwiftTelegramSdk", package: "swift-telegram-sdk"),
-                .target(name: "Shared")
+                .target(name: "Shared"),
+                .target(name: "ReleaseWatcher")
             ]
         ),
         .testTarget(

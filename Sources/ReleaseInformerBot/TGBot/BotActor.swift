@@ -9,12 +9,6 @@ import SwiftTelegramSdk
 
 actor BotActor {
     private var _bot: TGBot!
-
-    var bot: TGBot {
-        self._bot
-    }
-    
-    func setBot(_ bot: TGBot) {
-        self._bot = bot
-    }
+    var bot: TGBot { self._bot }
+    func setBot(_ bot: TGBot) { self._bot = bot }
 }
