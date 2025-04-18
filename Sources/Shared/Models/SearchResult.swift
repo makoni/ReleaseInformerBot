@@ -24,14 +24,14 @@ import Foundation
 
 public struct SearchResult: Codable, Sendable {
     public let title: String
-    public let bundleId: String
+    public let bundleID: String
     public let url: String
     public let version: String
     public let releaseNotes: String
 
     enum CodingKeys: String, CodingKey {
         case title = "trackCensoredName"
-        case bundleId = "bundleId"
+        case bundleID = "bundleId"
         case url = "trackViewUrl"
         case version
         case releaseNotes = "releaseNotes"
