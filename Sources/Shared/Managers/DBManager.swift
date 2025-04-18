@@ -28,7 +28,7 @@ public actor DBManager {
     private let db = "release_bot"
 
     public func subscribeForNewVersions(_ result: SearchResult, forChatID chatID: Int64) async throws {
-        // update existing
+        // Update existing subscription
         if var subscription = try await self.searchByBundleID(result.bundleID) {
             if !subscription.chats.contains(chatID) {
                 subscription.chats.insert(chatID)
@@ -37,10 +37,16 @@ public actor DBManager {
             return
         }
 
-        // add new one
-        let subscription = Subscription(bundleID: result.bundleID, url: result.url, title: result.title, version: [result.version], chats: [chatID])
+        // Add a new subscription
+        let subscription = Subscription(
+            bundleID: result.bundleID,
+            url: result.url,
+            title: result.title,
+            version: [result.version],
+            chats: [chatID]
+        )
         _ = try await couchDBClient.insert(dbName: db, doc: subscription)
-        logger.info("\(result.bundleID) has been added to DB")
+        logger.info("Subscription for \(result.bundleID) has been added to the database.")
     }
 
     public func unsubscribeFromNewVersions(_ bundleID: String, forChatID chatID: Int64) async throws -> Subscription? {
@@ -64,6 +70,7 @@ public actor DBManager {
             throw DBManagerError.chatsNotEmpty
         }
         _ = try await couchDBClient.delete(fromDb: db, doc: subscription)
+        logger.info("Subscription for \(subscription.bundleID) has been deleted from the database.")
     }
 
     private func searchByBundleID(_ bundleID: String) async throws -> Subscription? {
@@ -82,7 +89,7 @@ public actor DBManager {
         var bytes = try await response.body.collect(upTo: expectedBytes)
 
         guard let data = bytes.readData(length: bytes.readableBytes) else {
-            logger.error("Could not read response")
+            logger.error("Failed to read response data.")
             return nil
         }
 
@@ -111,12 +118,11 @@ public actor DBManager {
         var bytes = try await response.body.collect(upTo: expectedBytes)
 
         guard let data = bytes.readData(length: bytes.readableBytes) else {
-            logger.error("Could not read response")
+            logger.error("Failed to read response data.")
             return []
         }
 
         let decoder = JSONDecoder()
-
         let subscriptions = try decoder.decode(
             RowsResponse<Subscription>.self,
             from: data
@@ -141,7 +147,7 @@ extension DBManager {
         var bytes = try await response.body.collect(upTo: expectedBytes)
 
         guard let data = bytes.readData(length: bytes.readableBytes) else {
-            logger.error("Could not read response")
+            logger.error("Failed to read response data.")
             return []
         }
 
@@ -162,5 +168,6 @@ extension DBManager {
         }
 
         _ = try await couchDBClient.update(dbName: db, doc: subscription)
+        logger.info("New version \(version) has been added to subscription \(subscription.bundleID).")
     }
 }
