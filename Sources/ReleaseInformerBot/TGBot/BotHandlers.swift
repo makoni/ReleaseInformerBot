@@ -36,9 +36,29 @@ final class BotHandlers {
 			TGCommandHandler(commands: ["/list"]) { update in
 				guard let chatID = update.message?.chat.id else { return }
 
-				let subscriptions = try await dbManager.search(byChatID: chatID)
-				let message = Self.makeListMessage(subscriptions)
+				var subscriptions = try await dbManager.search(byChatID: chatID)
 
+                if subscriptions.count > 10 {
+                    var chunk: [Subscription] = []
+                    while subscriptions.count > 0 {
+                        chunk.append(subscriptions.removeFirst())
+
+                        if chunk.count >= 10 {
+                            let message = Self.makeListMessage(chunk)
+                            chunk.removeAll()
+                            try await update.message?.reply(text: message, bot: bot, parseMode: .html)
+                        }
+                    }
+
+                    if chunk.count > 0 {
+                        let message = Self.makeListMessage(chunk)
+                        chunk.removeAll()
+                        try await update.message?.reply(text: message, bot: bot, parseMode: .html)
+                    }
+
+                    return
+                }
+				let message = Self.makeListMessage(subscriptions)
 				try await update.message?.reply(text: message, bot: bot, parseMode: .html)
 			})
 	}
