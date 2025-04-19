@@ -27,7 +27,7 @@ public struct SearchResult: Codable, Sendable {
 	public let bundleID: String
 	public let url: String
 	public let version: String
-	public let releaseNotes: String
+	public let releaseNotes: String?
 
 	enum CodingKeys: String, CodingKey {
 		case title = "trackCensoredName"
