@@ -42,14 +42,16 @@ public actor ReleaseWatcher {
 
 		timer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
         appCheckTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
+	}
 
-		timer.schedule(deadline: .now(), repeating: .seconds(60 * 5))
-		timer.setEventHandler {
-			Task {
-				guard await self.queue.isEmpty == true else { return }
-				await self.run()
-			}
-		}
+    func configureTimers() async {
+        timer.schedule(deadline: .now(), repeating: .seconds(60 * 5))
+        timer.setEventHandler {
+            Task {
+                guard self.queue.isEmpty == true else { return }
+                await self.run()
+            }
+        }
 
         appCheckTimer.schedule(deadline: .now(), repeating: .seconds(2))
         appCheckTimer.setEventHandler {
@@ -57,13 +59,14 @@ public actor ReleaseWatcher {
                 try await self.handleSubscription()
             }
         }
-	}
+    }
 
 	public func setBot(_ bot: TGBot?) {
 		self.tgBot = bot
 	}
 
 	public func start() async {
+        await configureTimers()
 		timer.resume()
         appCheckTimer.resume()
 	}
