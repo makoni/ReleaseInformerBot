@@ -44,12 +44,14 @@ public actor SearchManager {
 			urlBuilder.path = "/search"
 			urlBuilder.queryItems = [
 				URLQueryItem(name: "term", value: title),
-				URLQueryItem(name: "entity", value: "software")
+				URLQueryItem(name: "entity", value: "software"),
+                URLQueryItem(name: "limit", value: "10")
 			]
 		case .bundleId(let bundleId):
 			urlBuilder.path = "/lookup"
 			urlBuilder.queryItems = [
-				URLQueryItem(name: "bundleId", value: bundleId)
+				URLQueryItem(name: "bundleId", value: bundleId),
+                URLQueryItem(name: "limit", value: "1")
 			]
 		}
 
