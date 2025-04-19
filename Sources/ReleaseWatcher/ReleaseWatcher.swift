@@ -44,17 +44,17 @@ public actor ReleaseWatcher {
         appCheckTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
 
 		timer.schedule(deadline: .now(), repeating: .seconds(60 * 5))
-		timer.setEventHandler { [weak self] in
-			Task { [weak self] in
-				guard await self?.queue.isEmpty == true else { return }
-				await self?.run()
+		timer.setEventHandler {
+			Task {
+				guard await self.queue.isEmpty == true else { return }
+				await self.run()
 			}
 		}
 
         appCheckTimer.schedule(deadline: .now(), repeating: .seconds(2))
-        appCheckTimer.setEventHandler { [weak self] in
-            Task { [weak self] in
-                try await self?.handleSubscription()
+        appCheckTimer.setEventHandler {
+            Task {
+                try await self.handleSubscription()
             }
         }
 	}
