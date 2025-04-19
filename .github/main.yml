@@ -1,0 +1,30 @@
+name: Build on Ubuntu with latest Swift (Docker)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  swift-docker:
+    container: 
+      image: swift:latest
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@master
+
+    - name: Swift build
+      run: swift build -c release
+      
+#     - name: Upload a Build Artifact
+#       uses: actions/upload-artifact@v2.2.4
+#       with:
+#         name: Run
+#         path: .build/x86_64-unknown-linux-gnu/release/Run
+#         if-no-files-found: error
+#         retention-days: 90
+            
+    - name: Done
+      run: echo Done
