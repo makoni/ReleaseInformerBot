@@ -70,7 +70,7 @@ public actor ReleaseWatcher {
 
 	func handleSubscription() async throws {
 		guard queue.isEmpty == false else { return }
-		let subscription = self.queue.removeFirst()
+		var subscription = self.queue.removeFirst()
 
 		if subscription.chats.isEmpty {
 			try await dbManager.deleteSubscription(subscription)
@@ -90,6 +90,10 @@ public actor ReleaseWatcher {
 		guard !subscription.version.contains(appData.version) else {
 			return
 		}
+
+        if subscription.title != appData.title {
+            subscription.title = appData.title
+        }
 
 		logger.info("New version \(appData.version) found for \(subscription.bundleID) - \(subscription.title).")
 		try await dbManager.addNewVersion(appData.version, forSubscription: subscription)
