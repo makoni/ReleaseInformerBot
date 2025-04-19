@@ -108,6 +108,10 @@ public actor ReleaseWatcher {
 				text += "URL: \(appData.url)\n"
 				text += "<b>Bundle ID:</b> \(appData.bundleID)\n\n"
 
+                if let releaseNotes = appData.releaseNotes {
+                    text += "<b>Release Notes:</b>\n\(releaseNotes)\n\n"
+                }
+
 				try await self.tgBot?.sendMessage(
 					params: .init(chatId: .chat(chat), text: text, parseMode: .html)
 				)
