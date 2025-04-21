@@ -1,6 +1,6 @@
-# ReleaseInformerBot
+# Release Informer Bot for Telegram
 
-💧 A project built with the Vapor web framework.
+A simple bot for Telegram that enables users to subscribe for notifications about new releases of an app in the App Store. It operates on the Vapor framework for server-side Swift development. 
 
 ## Getting Started
 
@@ -19,9 +19,20 @@ To execute tests, use the following command:
 swift test
 ```
 
-### See more
+## View documents for CouchDB
 
-- [Vapor Website](https://vapor.codes)
-- [Vapor Documentation](https://docs.vapor.codes)
-- [Vapor GitHub](https://github.com/vapor)
-- [Vapor Community](https://github.com/vapor-community)
+Views for CouchDB:
+```json
+{
+   "_id": "_design/list",
+   "language": "javascript",
+   "views": {
+       "by_bundle": {
+           "map": "function(doc) {\n  emit(doc.bundle_id, doc);\n}"
+       },
+       "by_chat": {
+           "map": "function(doc) {\n  for (var i=0; i<doc.chats.length; i++) {\n    emit(doc.chats[i], doc);\n  }\n}"
+       }
+   }
+}
+```
