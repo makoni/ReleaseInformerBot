@@ -98,6 +98,10 @@ public actor ReleaseWatcher {
             subscription.title = appData.title
         }
 
+        if subscription.url != appData.url {
+            subscription.url = appData.url
+        }
+
 		logger.info("New version \(appData.version) found for \(subscription.bundleID) - \(subscription.title).")
 		try await dbManager.addNewVersion(appData.version, forSubscription: subscription)
 
@@ -120,7 +124,7 @@ public actor ReleaseWatcher {
 				)
 				logger.info("Notification sent to chat: \(chat)")
 			} catch {
-				logger.error("Failed to send notification to chat \(chat). Error: \(error)")
+				logger.error("Failed to send notification for \(subscription.bundleID) to chat \(chat). Error: \(error)")
 			}
 
 			try await Task.sleep(for: .seconds(2))
