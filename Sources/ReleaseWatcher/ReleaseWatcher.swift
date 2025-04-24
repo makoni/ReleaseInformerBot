@@ -41,34 +41,35 @@ public actor ReleaseWatcher {
 		self.dbManager = dbManager
 
 		timer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
-        appCheckTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
+		appCheckTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
 	}
 
-    func configureTimers() async {
-        timer.schedule(deadline: .now(), repeating: .seconds(60 * 5))
-        timer.setEventHandler {
-            Task {
-                guard self.queue.isEmpty == true else { return }
-                await self.run()
-            }
-        }
+	func configureTimers() {
+		timer.schedule(deadline: .now(), repeating: .seconds(60 * 5))
+		timer.setEventHandler { [weak self] in
+			Task { [weak self] in
+				guard let self else { return }
+				guard await self.queue.isEmpty == true else { return }
+				await self.run()
+			}
+		}
 
-        appCheckTimer.schedule(deadline: .now(), repeating: .seconds(2))
-        appCheckTimer.setEventHandler {
-            Task {
-                try await self.handleSubscription()
-            }
-        }
-    }
+		appCheckTimer.schedule(deadline: .now(), repeating: .seconds(2))
+		appCheckTimer.setEventHandler { [weak self] in
+			Task { [weak self] in
+				try await self?.handleSubscription()
+			}
+		}
+	}
 
 	public func setBot(_ bot: TGBot?) {
 		self.tgBot = bot
 	}
 
-	public func start() async {
-        await configureTimers()
+	public func start() {
+		configureTimers()
 		timer.resume()
-        appCheckTimer.resume()
+		appCheckTimer.resume()
 	}
 
 	func handleSubscription() async throws {
@@ -94,9 +95,13 @@ public actor ReleaseWatcher {
 			return
 		}
 
-        if subscription.title != appData.title {
-            subscription.title = appData.title
-        }
+		if subscription.title != appData.title {
+			subscription.title = appData.title
+		}
+
+		if subscription.url != appData.url {
+			subscription.url = appData.url
+		}
 
 		logger.info("New version \(appData.version) found for \(subscription.bundleID) - \(subscription.title).")
 		try await dbManager.addNewVersion(appData.version, forSubscription: subscription)
@@ -111,16 +116,16 @@ public actor ReleaseWatcher {
 				text += "URL: \(appData.url)\n"
 				text += "<b>Bundle ID:</b> \(appData.bundleID)\n\n"
 
-                if let releaseNotes = appData.releaseNotes {
-                    text += "<b>Release Notes:</b>\n\(releaseNotes)\n\n"
-                }
+				if let releaseNotes = appData.releaseNotes {
+					text += "<b>Release Notes:</b>\n\(releaseNotes)\n\n"
+				}
 
 				try await self.tgBot?.sendMessage(
 					params: .init(chatId: .chat(chat), text: text, parseMode: .html)
 				)
 				logger.info("Notification sent to chat: \(chat)")
 			} catch {
-				logger.error("Failed to send notification to chat \(chat). Error: \(error)")
+				logger.error("Failed to send notification for \(subscription.bundleID) to chat \(chat). Error: \(error)")
 			}
 
 			try await Task.sleep(for: .seconds(2))
