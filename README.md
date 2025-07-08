@@ -32,7 +32,7 @@ The Release Informer Bot provides a comprehensive subscription system for iOS ap
   - `Shared`: Common models and database management
 - **Robust Monitoring**: Automated release checking with intelligent rate limiting and error handling
 - **Scalable Storage**: CouchDB integration with optimized views for efficient queries
-- **Production Ready**: Comprehensive logging, error handling, and Docker support
+- **Production Ready**: Comprehensive logging and error handling
 - **Real-time Notifications**: Instant notifications with rich formatting including release notes
 - **Resource Management**: Intelligent memory management with version history limits (5 versions per app)
 
@@ -42,7 +42,7 @@ The Release Informer Bot provides a comprehensive subscription system for iOS ap
 - **Concurrency**: Swift's native actor system for thread-safe operations  
 - **Database**: CouchDB with custom views for efficient data access
 - **External APIs**: iTunes Search/Lookup API for app metadata
-- **Deployment**: Docker containers with multi-stage builds for production
+- **Deployment**: Flexible for local development and production
 
 ## Dependencies
 
@@ -60,11 +60,11 @@ The project uses carefully selected, production-grade dependencies:
 ## Deployment Instructions
 
 ### Prerequisites
-- Swift 6.0+ or Docker
+- Swift 6.0+
 - CouchDB instance (local or remote)
 - Telegram Bot Token (from [@BotFather](https://t.me/botfather))
 
-### Option 1: Swift Package Manager (Development)
+### Swift Package Manager (Development)
 
 1. **Clone the repository**:
    ```bash
@@ -88,32 +88,6 @@ The project uses carefully selected, production-grade dependencies:
    swift test
    ```
 
-### Option 2: Docker (Recommended for Production)
-
-1. **Build the Docker image**:
-   ```bash
-   docker build -t releaseinformerbot .
-   ```
-
-2. **Run with Docker**:
-   ```bash
-   docker run -e apiKey="YOUR_TELEGRAM_BOT_TOKEN" -p 8080:8080 releaseinformerbot
-   ```
-
-### Option 3: Docker Compose (Complete Setup)
-
-1. **Start services**:
-   ```bash
-   docker compose up -d
-   ```
-
-2. **Set your bot token**:
-   ```bash
-   # Edit docker-compose.yml or set environment variable
-   export apiKey="YOUR_TELEGRAM_BOT_TOKEN"
-   docker compose up app
-   ```
-
 ### Production Configuration
 
 For production deployments, ensure:
@@ -124,7 +98,15 @@ For production deployments, ensure:
 
 ## CouchDB Setup
 
-The bot requires the following CouchDB views for efficient data access:
+The bot will automatically create the required CouchDB database (`release_bot`) and design document with the necessary views on startup.
+
+**Automatic Setup:**
+
+- The `DBManager` includes a `setupIfNeed()` method that checks for the existence of the database and required views, and creates them if they do not exist. No manual setup is required for most users—just ensure your CouchDB instance is running and credentials are configured in `DBManager.swift`.
+
+**Manual Setup (optional):**
+
+If you prefer to create the database and design document manually, use the following JSON for the design document:
 
 ```json
 {
