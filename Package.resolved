@@ -33,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/makoni/couchdb-swift.git",
       "state" : {
-        "revision" : "382c797bbfb18da4754bbd65dba181ae0fad33a2",
-        "version" : "2.1.1"
+        "revision" : "1bc01cd8bd22d273eb01bb83b73b255bfa514687",
+        "version" : "2.2.0"
       }
     },
     {
