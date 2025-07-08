@@ -39,7 +39,7 @@ public func configure(_ app: Application) async throws {
     } catch {
         logger.error("Could not start bot: \(error.localizedDescription)")
         try await Task.sleep(for: .seconds(10))
-        exit(0)
+        exit(1)
     }
 
 	await releaseWatcher.setBot(botActor.bot)
