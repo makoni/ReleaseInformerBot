@@ -63,15 +63,18 @@ public actor DBManager {
 		var needsCreate = false
 		do {
 			let _: DesignDocument = try await couchDBClient.get(fromDB: db, uri: designDocURI)
-        } catch let error as CouchDBClientError {
-            switch error {
-            case .notFound:
-                needsCreate = true
-            default:
-                logger.error("Unexpected error while checking design document: \(error.localizedDescription)")
-                throw error
-            }
-        }
+		} catch let error as CouchDBClientError {
+			switch error {
+			case .notFound:
+				needsCreate = true
+			default:
+				logger.error("Unexpected error while checking design document: \(error.localizedDescription)")
+				throw error
+			}
+		} catch {
+			throw error
+		}
+
 		if needsCreate {
 			_ = try await couchDBClient.insert(dbName: db, doc: designDoc)
 			logger.info("Design document created with by_bundle and by_chat views.")
