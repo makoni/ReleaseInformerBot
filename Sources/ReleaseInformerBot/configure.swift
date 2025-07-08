@@ -13,7 +13,7 @@ let releaseWatcher = ReleaseWatcher(dbManager: dbManager)
 public func configure(_ app: Application) async throws {
     try await dbManager.setupIfNeed()
     
-    let bot: TGBot!
+    let bot: TGBot
     do {
         bot = try await .init(
             connectionType: .longpolling(limit: nil, timeout: nil, allowedUpdates: nil),
