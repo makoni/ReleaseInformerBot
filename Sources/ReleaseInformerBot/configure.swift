@@ -11,7 +11,13 @@ let releaseWatcher = ReleaseWatcher(dbManager: dbManager)
 
 // configures your application
 public func configure(_ app: Application) async throws {
-    try await dbManager.setupIfNeed()
+    do {
+        try await dbManager.setupIfNeed()
+    } catch {
+        logger.error("Database setup failed: \(error.localizedDescription)")
+        try await Task.sleep(for: .seconds(10))
+        exit(1)
+    }
     
     let bot: TGBot
     do {
