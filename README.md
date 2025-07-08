@@ -124,7 +124,15 @@ For production deployments, ensure:
 
 ## CouchDB Setup
 
-The bot requires the following CouchDB views for efficient data access:
+The bot will automatically create the required CouchDB database (`release_bot`) and design document with the necessary views on startup.
+
+**Automatic Setup:**
+
+- The `DBManager` includes a `setupIfNeed()` method that checks for the existence of the database and required views, and creates them if they do not exist. No manual setup is required for most users—just ensure your CouchDB instance is running and credentials are configured in `DBManager.swift`.
+
+**Manual Setup (optional):**
+
+If you prefer to create the database and design document manually, use the following JSON for the design document:
 
 ```json
 {
