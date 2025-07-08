@@ -48,7 +48,6 @@ public actor DBManager {
 
 		// 3. Check and create design document for by_bundle and by_chat
 		let designDocID = "_design/list"
-		let designDocURI = designDocID
 		let byBundleViewMap = "function(doc) { emit(doc.bundle_id, doc); }"
 		let byChatViewMap = "function(doc) { for (var i=0; i<doc.chats.length; i++) { emit(doc.chats[i], doc); } }"
 		let designDoc = DesignDocument(
@@ -62,7 +61,7 @@ public actor DBManager {
 
 		var needsCreate = false
 		do {
-			let _: DesignDocument = try await couchDBClient.get(fromDB: db, uri: designDocURI)
+			let _: DesignDocument = try await couchDBClient.get(fromDB: db, uri: designDocID)
 		} catch let error as CouchDBClientError {
 			switch error {
 			case .notFound:
