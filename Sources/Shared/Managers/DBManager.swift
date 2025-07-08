@@ -17,10 +17,62 @@ fileprivate let couchDBClient = CouchDBClient(
 
 fileprivate let logger = Logger(label: "DBManager")
 
+// Codable struct for CouchDB design document
+fileprivate struct DesignDocument: CouchDBRepresentable {
+	let _id: String
+	let language: String
+	let views: [String: [String: String]]
+	// Optionally add _rev if you want to support updates
+	var _rev: String?
+
+	func updateRevision(_ newRevision: String) -> DesignDocument {
+		return DesignDocument(_id: _id, language: language, views: views, _rev: newRevision)
+	}
+}
+
 public actor DBManager {
+	private let db = "release_bot"
+
 	public init() {}
 
-	private let db = "release_bot"
+	/// Sets up the CouchDB database and required design documents.
+	public func setupIfNeed() async throws {
+		// 1. Check if DB exists using dbExists
+		let dbExists = try await couchDBClient.dbExists(db)
+		if !dbExists {
+			try await couchDBClient.createDB(db)
+			logger.info("Database \(db) created.")
+		} else {
+			logger.info("Database \(db) exists.")
+		}
+
+		// 3. Check and create design document for by_bundle and by_chat
+		let designDocID = "_design/list"
+		let designDocURI = designDocID
+		let byBundleViewMap = "function(doc) { emit(doc.bundle_id, doc); }"
+		let byChatViewMap = "function(doc) { for (var i=0; i<doc.chats.length; i++) { emit(doc.chats[i], doc); } }"
+		let designDoc = DesignDocument(
+			_id: designDocID,
+			language: "javascript",
+			views: [
+				"by_bundle": ["map": byBundleViewMap],
+				"by_chat": ["map": byChatViewMap]
+			]
+		)
+
+		var needsCreate = false
+		do {
+			let _: DesignDocument = try await couchDBClient.get(fromDB: db, uri: designDocURI)
+		} catch {
+			needsCreate = true
+		}
+		if needsCreate {
+			_ = try await couchDBClient.insert(dbName: db, doc: designDoc)
+			logger.info("Design document created with by_bundle and by_chat views.")
+		} else {
+			logger.info("Design document already exists.")
+		}
+	}
 
 	public func subscribeForNewVersions(_ result: SearchResult, forChatID chatID: Int64) async throws {
 		// Update existing subscription

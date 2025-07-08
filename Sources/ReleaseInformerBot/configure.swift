@@ -11,6 +11,8 @@ let releaseWatcher = ReleaseWatcher(dbManager: dbManager)
 
 // configures your application
 public func configure(_ app: Application) async throws {
+    try await dbManager.setupIfNeed()
+    
     let bot: TGBot!
     do {
         bot = try await .init(
