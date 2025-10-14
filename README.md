@@ -131,6 +131,15 @@ For production deployments, ensure:
 - Provide CouchDB credentials via configuration (environment variables or JSON file)
 - Use proper secrets management for the Telegram bot token
 - Set up monitoring and health checks on port 8080
+- Ensure the `couchdb-swift_CouchDBClient.resources` bundle is deployed alongside the binary. When you build with SwiftPM (e.g., `swift build --swift-sdk x86_64-swift-linux-musl -c release`), copy both of these paths to the server directory where you host the executable:
+   - `.build/x86_64-swift-linux-musl/release/ReleaseInformerBot`
+   - `.build/x86_64-swift-linux-musl/release/couchdb-swift_CouchDBClient.resources`
+   A minimal deployment directory on the server should look like:
+   ```
+   /home/user/ReleaseInformerBot
+   ├── ReleaseInformerBot
+   └── couchdb-swift_CouchDBClient.resources/
+   ```
 
 ## CouchDB Setup
 
