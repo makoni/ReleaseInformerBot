@@ -53,6 +53,7 @@ The project uses carefully selected, production-grade dependencies:
 - **[Swift NIO](https://github.com/apple/swift-nio)** `2.65.0+` - Non-blocking networking foundation
 - **[SwiftTelegramSdk](https://github.com/nerzh/swift-telegram-sdk)** `3.8.0+` - Telegram Bot API client
 - **[CouchDB Swift](https://github.com/makoni/couchdb-swift)** `2.1.0+` - CouchDB client library
+- **[Swift Configuration](https://github.com/apple/swift-configuration)** `0.1.0+` - Unified configuration reader for environment variables and files
 
 ### Development Dependencies
 - **VaporTesting** - Testing utilities for Vapor applications
@@ -61,6 +62,7 @@ The project uses carefully selected, production-grade dependencies:
 
 ### Prerequisites
 - Swift 6.0+
+- macOS 15.0+ or Linux with Swift 6 toolchain
 - CouchDB instance (local or remote)
 - Telegram Bot Token (from [@BotFather](https://t.me/botfather))
 
@@ -72,9 +74,13 @@ The project uses carefully selected, production-grade dependencies:
    cd ReleaseInformerBot
    ```
 
-2. **Set environment variables**:
+2. **Set environment variables** (override as needed):
    ```bash
-   export apiKey="YOUR_TELEGRAM_BOT_TOKEN"
+   export TELEGRAM_API_KEY="YOUR_TELEGRAM_BOT_TOKEN"
+   export COUCH_HOST="127.0.0.1"
+   export COUCH_USER="admin"
+   export COUCH_PASSWORD=""
+   export COUCH_PORT=5984
    ```
 
 3. **Build and run**:
@@ -88,13 +94,52 @@ The project uses carefully selected, production-grade dependencies:
    swift test
    ```
 
+### Configuration
+
+The bot now uses [Swift Configuration](https://github.com/apple/swift-configuration) to resolve settings from multiple sources. The lookup order is:
+1. Environment variables (using uppercase keys such as `TELEGRAM_API_KEY` or `COUCH_HOST`)
+2. Optional JSON configuration file
+3. Hard-coded defaults
+
+Provide a JSON file at `config/config.json` (or set `RELEASE_INFORMER_CONFIG_PATH` to an absolute path) to manage settings locally:
+
+```json
+{
+   "telegram": {
+      "apiKey": "YOUR_TELEGRAM_BOT_TOKEN"
+   },
+   "couch": {
+      "protocol": "http",
+      "host": "127.0.0.1",
+      "port": 5984,
+      "user": "admin",
+      "password": "",
+      "requestsTimeout": 30
+   },
+   "runtime": {
+      "bootstrapServices": true
+   }
+}
+```
+
+Set `runtime.bootstrapServices` to `false` (default in `testing` environment) to skip bot initialization and external service connections while still registering routes.
+
 ### Production Configuration
 
 For production deployments, ensure:
 - Set `LOG_LEVEL=info` or `LOG_LEVEL=warning`
-- Configure CouchDB credentials in `DBManager.swift`
+- Provide CouchDB credentials via configuration (environment variables or JSON file)
 - Use proper secrets management for the Telegram bot token
 - Set up monitoring and health checks on port 8080
+- Ensure the `couchdb-swift_CouchDBClient.resources` bundle is deployed alongside the binary. When you build with SwiftPM (e.g., `swift build --swift-sdk x86_64-swift-linux-musl -c release`), copy both of these paths to the server directory where you host the executable:
+   - `.build/x86_64-swift-linux-musl/release/ReleaseInformerBot`
+   - `.build/x86_64-swift-linux-musl/release/couchdb-swift_CouchDBClient.resources`
+   A minimal deployment directory on the server should look like:
+   ```
+   /home/user/ReleaseInformerBot
+   ├── ReleaseInformerBot
+   └── couchdb-swift_CouchDBClient.resources/
+   ```
 
 ## CouchDB Setup
 
@@ -102,7 +147,7 @@ The bot will automatically create the required CouchDB database (`release_bot`) 
 
 **Automatic Setup:**
 
-- The `DBManager` includes a `setupIfNeed()` method that checks for the existence of the database and required views, and creates them if they do not exist. No manual setup is required for most users—just ensure your CouchDB instance is running and credentials are configured in `DBManager.swift`.
+- The `DBManager` includes a `setupIfNeed()` method that checks for the existence of the database and required views, and creates them if they do not exist. No manual setup is required for most users—just ensure your CouchDB instance is running and credentials are provided through configuration.
 
 **Manual Setup (optional):**
 

@@ -9,13 +9,51 @@ import Foundation
 import CouchDBClient
 import Logging
 
-fileprivate let couchDBClient = CouchDBClient(
-	config: CouchDBClient.Config(
-		userName: "admin"
-	)
-)
-
 fileprivate let logger = Logger(label: "DBManager")
+
+public struct CouchConfig: Sendable {
+	public var couchProtocol: CouchDBClient.CouchDBProtocol
+	public var host: String
+	public var port: Int
+	public var user: String
+	public var password: String
+	public var timeout: Int64
+
+	public init(
+		couchProtocol: CouchDBClient.CouchDBProtocol = .http,
+		host: String = "127.0.0.1",
+		port: Int = 5984,
+		user: String = "admin",
+		password: String = ProcessInfo.processInfo.environment["COUCHDB_PASS"] ?? "",
+		timeout: Int64 = 30
+	) {
+		self.couchProtocol = couchProtocol
+		self.host = host
+		self.port = port
+		self.user = user
+		self.password = password
+		self.timeout = timeout
+	}
+}
+
+fileprivate func makeClient(for config: CouchConfig) -> CouchDBClient {
+	CouchDBClient(
+		config: .init(
+			couchProtocol: config.couchProtocol,
+			couchHost: config.host,
+			couchPort: config.port,
+			userName: config.user,
+			userPassword: config.password,
+			requestsTimeout: config.timeout
+		)
+	)
+}
+
+public extension CouchConfig {
+	static func makeProtocol(_ value: String) -> CouchDBClient.CouchDBProtocol {
+		CouchDBClient.CouchDBProtocol(rawValue: value.lowercased()) ?? .http
+	}
+}
 
 // Codable struct for CouchDB design document
 fileprivate struct DesignDocument: CouchDBRepresentable {
@@ -32,8 +70,11 @@ fileprivate struct DesignDocument: CouchDBRepresentable {
 
 public actor DBManager {
 	private let db = "release_bot"
+	private let couchDBClient: CouchDBClient
 
-	public init() {}
+	public init(couchConfig: CouchConfig = CouchConfig()) {
+		self.couchDBClient = makeClient(for: couchConfig)
+	}
 
 	/// Sets up the CouchDB database and required design documents.
 	public func setupIfNeed() async throws {
