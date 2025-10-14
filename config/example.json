@@ -1,0 +1,16 @@
+{
+  "telegram": {
+    "apiKey": "YOUR_TELEGRAM_BOT_TOKEN"
+  },
+  "couch": {
+    "protocol": "http",
+    "host": "127.0.0.1",
+    "port": 5984,
+    "user": "admin",
+    "password": "",
+    "requestsTimeout": 30
+  },
+  "runtime": {
+    "bootstrapServices": true
+  }
+}

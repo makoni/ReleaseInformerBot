@@ -14,14 +14,14 @@ import Logging
 let searchManager = SearchManager()
 
 final class BotHandlers {
-	static func addHandlers(bot: TGBot) async {
+	static func addHandlers(bot: TGBot, dbManager: DBManager) async {
 		await help(bot: bot)
-		await list(bot: bot)
+		await list(bot: bot, dbManager: dbManager)
 		await search(bot: bot)
-		await add(bot: bot)
-		await del(bot: bot)
+		await add(bot: bot, dbManager: dbManager)
+		await del(bot: bot, dbManager: dbManager)
 		await commandShowButtonsHandler(bot: bot)
-		await buttonsActionHandler(bot: bot)
+		await buttonsActionHandler(bot: bot, dbManager: dbManager)
 	}
 
 	private static func help(bot: TGBot) async {
@@ -31,11 +31,10 @@ final class BotHandlers {
 			})
 	}
 
-	private static func list(bot: TGBot) async {
+	private static func list(bot: TGBot, dbManager: DBManager) async {
 		await bot.dispatcher.add(
 			TGCommandHandler(commands: ["/list"]) { update in
 				guard let chatID = update.message?.chat.id else { return }
-
 				var subscriptions = try await dbManager.search(byChatID: chatID)
 
                 if subscriptions.count > 10 {
@@ -76,7 +75,7 @@ final class BotHandlers {
 			})
 	}
 
-	private static func del(bot: TGBot) async {
+	private static func del(bot: TGBot, dbManager: DBManager) async {
 		await bot.dispatcher.add(
 			TGCommandHandler(commands: ["/del"]) { update in
 				guard let chatID = update.message?.chat.id else { return }
@@ -94,7 +93,7 @@ final class BotHandlers {
 			})
 	}
 
-	private static func add(bot: TGBot) async {
+	private static func add(bot: TGBot, dbManager: DBManager) async {
 		await bot.dispatcher.add(
 			TGCommandHandler(commands: ["/add"]) { update in
 				guard let chatID = update.message?.chat.id else { return }
@@ -138,7 +137,7 @@ final class BotHandlers {
 			})
 	}
 
-	private static func buttonsActionHandler(bot: TGBot) async {
+	private static func buttonsActionHandler(bot: TGBot, dbManager: DBManager) async {
 		await bot.dispatcher.add(
 			TGCallbackQueryHandler(pattern: "help") { update in
 				bot.log.info("help")

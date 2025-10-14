@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "ReleaseInformerBot",
     platforms: [
-       .macOS(.v13)
+        .macOS(.v15)
     ],
     dependencies: [
         // 💧 A server-side Swift web framework.
@@ -13,6 +13,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
         .package(url: "https://github.com/nerzh/swift-telegram-sdk.git", .upToNextMajor(from: "3.8.0")),
         .package(url: "https://github.com/makoni/couchdb-swift.git", from: "2.1.0"),
+        .package(url: "https://github.com/apple/swift-configuration", .upToNextMinor(from: "0.1.0")),
     ],
     targets: [
         .target(
@@ -35,6 +36,7 @@ let package = Package(
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "SwiftTelegramSdk", package: "swift-telegram-sdk"),
+                .product(name: "Configuration", package: "swift-configuration"),
                 .target(name: "Shared"),
                 .target(name: "ReleaseWatcher")
             ]
@@ -44,6 +46,7 @@ let package = Package(
             dependencies: [
                 .target(name: "ReleaseInformerBot"),
                 .product(name: "VaporTesting", package: "vapor"),
+                .product(name: "Configuration", package: "swift-configuration"),
             ]
         )
     ]
