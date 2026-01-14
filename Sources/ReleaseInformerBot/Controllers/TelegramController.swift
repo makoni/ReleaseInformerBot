@@ -7,7 +7,7 @@
 
 import Foundation
 import Vapor
-@preconcurrency import SwiftTelegramSdk
+import SwiftTelegramBot
 
 final class TelegramController: RouteCollection {
 	func boot(routes: any Vapor.RoutesBuilder) throws {}

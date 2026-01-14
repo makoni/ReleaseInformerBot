@@ -5,7 +5,7 @@
 //  Created by Sergei Armodin on 17.04.2025.
 //
 
-import SwiftTelegramSdk
+import SwiftTelegramBot
 
 actor BotActor {
 	private var _bot: TGBot!

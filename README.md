@@ -51,7 +51,7 @@ The project uses carefully selected, production-grade dependencies:
 ### Core Dependencies
 - **[Vapor](https://github.com/vapor/vapor)** `4.110.1+` - Server-side Swift web framework
 - **[Swift NIO](https://github.com/apple/swift-nio)** `2.65.0+` - Non-blocking networking foundation
-- **[SwiftTelegramSdk](https://github.com/nerzh/swift-telegram-sdk)** `3.8.0+` - Telegram Bot API client
+- **[SwiftTelegramBot](https://github.com/nerzh/swift-telegram-bot)** `4.3.0+` - Telegram Bot API client
 - **[CouchDB Swift](https://github.com/makoni/couchdb-swift)** `2.1.0+` - CouchDB client library
 - **[Swift Configuration](https://github.com/apple/swift-configuration)** `0.1.0+` - Unified configuration reader for environment variables and files
 

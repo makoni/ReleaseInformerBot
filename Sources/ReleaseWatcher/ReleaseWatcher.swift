@@ -8,7 +8,7 @@
 import Foundation
 import Shared
 import Logging
-@preconcurrency import SwiftTelegramSdk
+import SwiftTelegramBot
 
 let logger = Logger(label: "ReleaseWatcher")
 

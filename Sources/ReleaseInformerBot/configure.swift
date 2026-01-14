@@ -1,7 +1,7 @@
 import Vapor
 import Shared
 import ReleaseWatcher
-@preconcurrency import SwiftTelegramSdk
+import SwiftTelegramBot
 import Logging
 import Configuration
 import Foundation
@@ -84,7 +84,6 @@ public func configure(_ app: Application) async throws {
 	do {
 		bot = try await .init(
 			connectionType: .longpolling(limit: nil, timeout: nil, allowedUpdates: nil),
-			dispatcher: nil,
 			tgClient: AsyncHttpTGClient(),
 			tgURI: TGBot.standardTGURL,
 			botId: telegramKey,
@@ -96,13 +95,10 @@ public func configure(_ app: Application) async throws {
 		exit(1)
 	}
 
-	let botActor: BotActor = .init()
-
-	await botActor.setBot(bot)
-	await BotHandlers.addHandlers(bot: botActor.bot, dbManager: dbManager)
-
 	do {
-		try await botActor.bot.start()
+		let dispatcher = ReleaseInformerDispatcher(bot: bot, logger: app.logger, dbManager: dbManager)
+		try await bot.add(dispatcher: dispatcher)
+		try await bot.start()
 	} catch {
 		logger.error("Could not start bot: \(error.localizedDescription)")
 		try await Task.sleep(for: .seconds(10))
@@ -111,7 +107,7 @@ public func configure(_ app: Application) async throws {
 
 	let releaseWatcher = ReleaseWatcher(dbManager: dbManager)
 	app.releaseInformerWatcher = releaseWatcher
-	await releaseWatcher.setBot(botActor.bot)
+	await releaseWatcher.setBot(bot)
 	await releaseWatcher.start()
 
 	// uncomment to serve files from /Public folder

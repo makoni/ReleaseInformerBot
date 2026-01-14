@@ -11,7 +11,7 @@ let package = Package(
         .package(url: "https://github.com/vapor/vapor.git", from: "4.110.1"),
         // 🔵 Non-blocking, event-driven networking for Swift. Used for custom executors
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
-        .package(url: "https://github.com/nerzh/swift-telegram-sdk.git", .upToNextMajor(from: "3.8.0")),
+        .package(url: "https://github.com/nerzh/swift-telegram-sdk.git", .upToNextMajor(from: "4.3.0")),
         .package(url: "https://github.com/makoni/couchdb-swift.git", from: "2.1.0"),
         .package(url: "https://github.com/apple/swift-configuration", .upToNextMinor(from: "0.1.0")),
     ],
@@ -25,7 +25,7 @@ let package = Package(
         .target(
             name: "ReleaseWatcher",
             dependencies: [
-                .product(name: "SwiftTelegramSdk", package: "swift-telegram-sdk"),
+                .product(name: "SwiftTelegramBot", package: "swift-telegram-sdk"),
                 .target(name: "Shared")
             ]
         ),
@@ -35,7 +35,7 @@ let package = Package(
                 .product(name: "Vapor", package: "vapor"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
-                .product(name: "SwiftTelegramSdk", package: "swift-telegram-sdk"),
+                .product(name: "SwiftTelegramBot", package: "swift-telegram-sdk"),
                 .product(name: "Configuration", package: "swift-configuration"),
                 .target(name: "Shared"),
                 .target(name: "ReleaseWatcher")
