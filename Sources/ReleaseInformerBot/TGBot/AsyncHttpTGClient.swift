@@ -11,11 +11,6 @@ import SwiftTelegramBot
 import Logging
 import AsyncHTTPClient
 
-public enum TGHTTPMediaType: String, Equatable {
-	case formData
-	case json
-}
-
 private struct TGEmptyParams: Encodable {}
 
 public final class AsyncHttpTGClient: TGClientPrtcl, @unchecked Sendable {
