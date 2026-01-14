@@ -7,23 +7,16 @@
 
 import Foundation
 import Vapor
-import SwiftTelegramSdk
+import SwiftTelegramBot
 import Logging
-import Foundation
 import AsyncHTTPClient
-import SwiftTelegramSdk
-
-public enum TGHTTPMediaType: String, Equatable {
-	case formData
-	case json
-}
 
 private struct TGEmptyParams: Encodable {}
 
-public final class AsyncHttpTGClient: TGClientPrtcl {
+public final class AsyncHttpTGClient: TGClientPrtcl, @unchecked Sendable {
 
-	public typealias HTTPMediaType = SwiftTelegramSdk.HTTPMediaType
-	public var log: Logger = .init(label: "AsyncHttpTGClient")
+	public typealias HTTPMediaType = SwiftTelegramBot.HTTPMediaType
+	private let log: Logger = .init(label: "AsyncHttpTGClient")
 	private let client: HTTPClient
 
 	public init(client: HTTPClient = .shared) {

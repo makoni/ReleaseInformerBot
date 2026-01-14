@@ -9,30 +9,31 @@ import Vapor
 import CouchDBClient
 import Shared
 import Logging
-@preconcurrency import SwiftTelegramSdk
+import SwiftTelegramBot
 
 let searchManager = SearchManager()
 
 final class BotHandlers {
-	static func addHandlers(bot: TGBot, dbManager: DBManager) async {
-		await help(bot: bot)
-		await list(bot: bot, dbManager: dbManager)
-		await search(bot: bot)
-		await add(bot: bot, dbManager: dbManager)
-		await del(bot: bot, dbManager: dbManager)
-		await commandShowButtonsHandler(bot: bot)
-		await buttonsActionHandler(bot: bot, dbManager: dbManager)
+	static func addHandlers(dispatcher: any TGDefaultDispatcherPrtcl, dbManager: DBManager) async {
+		let bot = dispatcher.bot
+		await help(dispatcher: dispatcher, bot: bot)
+		await list(dispatcher: dispatcher, bot: bot, dbManager: dbManager)
+		await search(dispatcher: dispatcher, bot: bot)
+		await add(dispatcher: dispatcher, bot: bot, dbManager: dbManager)
+		await del(dispatcher: dispatcher, bot: bot, dbManager: dbManager)
+		await commandShowButtonsHandler(dispatcher: dispatcher, bot: bot)
+		await buttonsActionHandler(dispatcher: dispatcher, bot: bot, dbManager: dbManager)
 	}
 
-	private static func help(bot: TGBot) async {
-		await bot.dispatcher.add(
+	private static func help(dispatcher: any TGDefaultDispatcherPrtcl, bot: TGBot) async {
+		await dispatcher.add(
 			TGCommandHandler(commands: ["/help"]) { update in
 				try await update.message?.reply(text: Self.helpText, bot: bot, parseMode: .html)
 			})
 	}
 
-	private static func list(bot: TGBot, dbManager: DBManager) async {
-		await bot.dispatcher.add(
+	private static func list(dispatcher: any TGDefaultDispatcherPrtcl, bot: TGBot, dbManager: DBManager) async {
+		await dispatcher.add(
 			TGCommandHandler(commands: ["/list"]) { update in
 				guard let chatID = update.message?.chat.id else { return }
 				var subscriptions = try await dbManager.search(byChatID: chatID)
@@ -62,8 +63,8 @@ final class BotHandlers {
 			})
 	}
 
-	private static func search(bot: TGBot) async {
-		await bot.dispatcher.add(
+	private static func search(dispatcher: any TGDefaultDispatcherPrtcl, bot: TGBot) async {
+		await dispatcher.add(
 			TGCommandHandler(commands: ["/search"]) { update in
 				guard var searchString = update.message?.text else { return }
 				searchString = String(searchString.dropFirst("/search".count)).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -75,8 +76,8 @@ final class BotHandlers {
 			})
 	}
 
-	private static func del(bot: TGBot, dbManager: DBManager) async {
-		await bot.dispatcher.add(
+	private static func del(dispatcher: any TGDefaultDispatcherPrtcl, bot: TGBot, dbManager: DBManager) async {
+		await dispatcher.add(
 			TGCommandHandler(commands: ["/del"]) { update in
 				guard let chatID = update.message?.chat.id else { return }
 				guard var searchString = update.message?.text else { return }
@@ -93,8 +94,8 @@ final class BotHandlers {
 			})
 	}
 
-	private static func add(bot: TGBot, dbManager: DBManager) async {
-		await bot.dispatcher.add(
+	private static func add(dispatcher: any TGDefaultDispatcherPrtcl, bot: TGBot, dbManager: DBManager) async {
+		await dispatcher.add(
 			TGCommandHandler(commands: ["/add"]) { update in
 				guard let chatID = update.message?.chat.id else { return }
 				guard var searchString = update.message?.text else { return }
@@ -114,11 +115,11 @@ final class BotHandlers {
 			})
 	}
 
-	private static func commandShowButtonsHandler(bot: TGBot) async {
-		await bot.dispatcher.add(
+	private static func commandShowButtonsHandler(dispatcher: any TGDefaultDispatcherPrtcl, bot: TGBot) async {
+		await dispatcher.add(
 			TGCommandHandler(commands: ["/start"]) { update in
 				guard let chatID = update.message?.chat.id else {
-					bot.log.error("User ID not found")
+					dispatcher.log.error("User ID not found")
 					return
 				}
 				let buttons: [[TGInlineKeyboardButton]] = [
@@ -137,13 +138,13 @@ final class BotHandlers {
 			})
 	}
 
-	private static func buttonsActionHandler(bot: TGBot, dbManager: DBManager) async {
-		await bot.dispatcher.add(
+	private static func buttonsActionHandler(dispatcher: any TGDefaultDispatcherPrtcl, bot: TGBot, dbManager: DBManager) async {
+		await dispatcher.add(
 			TGCallbackQueryHandler(pattern: "help") { update in
-				bot.log.info("help")
+				dispatcher.log.info("help")
 
 				guard let chatID = update.callbackQuery?.from.id else {
-					bot.log.error("user id not found")
+					dispatcher.log.error("user id not found")
 					return
 				}
 
@@ -158,10 +159,10 @@ final class BotHandlers {
 				try await bot.sendMessage(params: .init(chatId: .chat(chatID), text: Self.helpText, parseMode: .html))
 			})
 
-		await bot.dispatcher.add(
+		await dispatcher.add(
 			TGCallbackQueryHandler(pattern: "list") { update in
 				guard let userId = update.callbackQuery?.from.id else {
-					bot.log.error("user id not found")
+					dispatcher.log.error("user id not found")
 					return
 				}
 
@@ -182,8 +183,8 @@ final class BotHandlers {
 	}
 }
 
-private extension BotHandlers {
-	static let helpText = """
+extension BotHandlers {
+	private static let helpText = """
 		Help: 
 
 		/help - Display this help message.

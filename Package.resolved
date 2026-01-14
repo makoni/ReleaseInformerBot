@@ -1,5 +1,5 @@
 {
-  "originHash" : "f4989baa2a28d8d30551cf4c60f3da73cfd924e435de95eff53cb3e720010496",
+  "originHash" : "a39e96988828ac380c971166e6c766aa13682aff51f2c482e1ef48fb0fcd954a",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -276,8 +276,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/nerzh/swift-telegram-sdk.git",
       "state" : {
-        "revision" : "3118673bd9b04193c569aba9a3caab464487f6f6",
-        "version" : "3.10.0"
+        "revision" : "5357836949f24d01ad0c4191abd22ab33ca10634",
+        "version" : "4.3.0"
       }
     },
     {
