@@ -183,8 +183,8 @@ final class BotHandlers {
 	}
 }
 
-private extension BotHandlers {
-	static let helpText = """
+extension BotHandlers {
+	private static let helpText = """
 		Help: 
 
 		/help - Display this help message.
