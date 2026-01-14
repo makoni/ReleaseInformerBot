@@ -57,7 +57,7 @@ struct BotHandlersFormattingTests {
 
 	@Test("makeListMessage: shows last version or N/A")
 	func listShowsLastVersion() throws {
-		let s1 = try makeSubscription(title: "MyApp", bundleID: "com.my.app", url: "https://example.com", versions: ["1.0", "1.1"]) 
+		let s1 = try makeSubscription(title: "MyApp", bundleID: "com.my.app", url: "https://example.com", versions: ["1.0", "1.1"])
 		let s2 = try makeSubscription(title: "NoVersion", bundleID: "com.none", url: "https://example.com/none", versions: [])
 		let message = BotHandlers.makeListMessage([s1, s2])
 		#expect(message.contains("<b>MyApp</b>"))
