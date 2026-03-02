@@ -276,8 +276,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/nerzh/swift-telegram-sdk.git",
       "state" : {
-        "revision" : "a91d402d7ff68a7ed25f6d36c6c12791e43b4201",
-        "version" : "4.4.0"
+        "revision" : "5c9999effd1d1c599982b82859bd6697e2fba659",
+        "version" : "4.5.0"
       }
     },
     {
