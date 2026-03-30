@@ -179,12 +179,9 @@ public actor DBManager {
 			response.headers
 			.first(name: "content-length")
 			.flatMap(Int.init) ?? 1024 * 1024 * 10
-		var bytes = try await response.body.collect(upTo: expectedBytes)
+		let bytes = try await response.body.collect(upTo: expectedBytes)
 
-		guard let data = bytes.readData(length: bytes.readableBytes) else {
-			logger.error("Failed to read response data.")
-			return nil
-		}
+		let data = Data(bytes.readableBytesView)
 
 		let decoder = JSONDecoder()
 		let subscriptions = try decoder.decode(
@@ -208,12 +205,9 @@ public actor DBManager {
 			response.headers
 			.first(name: "content-length")
 			.flatMap(Int.init) ?? 1024 * 1024 * 10
-		var bytes = try await response.body.collect(upTo: expectedBytes)
+		let bytes = try await response.body.collect(upTo: expectedBytes)
 
-		guard let data = bytes.readData(length: bytes.readableBytes) else {
-			logger.error("Failed to read response data.")
-			return []
-		}
+		let data = Data(bytes.readableBytesView)
 
 		let decoder = JSONDecoder()
 		let subscriptions = try decoder.decode(
@@ -237,12 +231,9 @@ extension DBManager {
 			response.headers
 			.first(name: "content-length")
 			.flatMap(Int.init) ?? 1024 * 1024 * 10
-		var bytes = try await response.body.collect(upTo: expectedBytes)
+		let bytes = try await response.body.collect(upTo: expectedBytes)
 
-		guard let data = bytes.readData(length: bytes.readableBytes) else {
-			logger.error("Failed to read response data.")
-			return []
-		}
+		let data = Data(bytes.readableBytesView)
 
 		let decoder = JSONDecoder()
 		let decoded = try decoder.decode(
