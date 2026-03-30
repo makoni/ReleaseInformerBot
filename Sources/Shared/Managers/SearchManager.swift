@@ -67,21 +67,21 @@ public actor SearchManager {
 
 		let body = response.body
 		let expectedBytes = response.headers.first(name: "content-length").flatMap(Int.init)
-		var bytes = try await body.collect(upTo: expectedBytes ?? 1024 * 1024 * 10)
+		let bytes = try await body.collect(upTo: expectedBytes ?? 1024 * 1024 * 10)
 
-		guard let data = bytes.readData(length: bytes.readableBytes) else {
+		let data = Data(bytes.readableBytesView)
+
+		guard !data.isEmpty else {
 			throw SearchError.noData
 		}
 
-		guard var dataString = String(data: data, encoding: .utf8) else {
+		guard var dataString = String(data: data, encoding: String.Encoding.utf8) else {
 			return []
 		}
 
 		dataString = processJSONString(dataString)
 
-		guard let correctedData = dataString.data(using: .utf8) else {
-			return []
-		}
+		let correctedData = Data(dataString.utf8)
 
 		return try JSONDecoder().decode(SearchResultResponse.self, from: correctedData).results
 	}
