@@ -11,7 +11,7 @@ let package = Package(
         .package(url: "https://github.com/vapor/vapor.git", from: "4.110.1"),
         // 🔵 Non-blocking, event-driven networking for Swift. Used for custom executors
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
-        .package(url: "https://github.com/nerzh/swift-telegram-sdk.git", .upToNextMajor(from: "4.3.0")),
+        .package(url: "https://github.com/nerzh/swift-telegram-sdk.git", .upToNextMajor(from: "10.0.0")),
         .package(url: "https://github.com/makoni/couchdb-swift.git", from: "2.1.0"),
         .package(url: "https://github.com/apple/swift-configuration", .upToNextMinor(from: "0.1.0")),
     ],
