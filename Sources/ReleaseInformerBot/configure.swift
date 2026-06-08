@@ -130,7 +130,7 @@ private func loadConfig(for app: Application) async throws -> ConfigReader {
 
 	if FileManager.default.fileExists(atPath: candidatePath) {
 		do {
-			let jsonProvider = try await JSONProvider(filePath: FilePath(candidatePath))
+			let jsonProvider = try await FileProvider<JSONSnapshot>(filePath: FilePath(candidatePath))
 			providers.append(jsonProvider)
 		} catch {
 			logger.warning("Failed to load configuration file at \(candidatePath): \(error)")
