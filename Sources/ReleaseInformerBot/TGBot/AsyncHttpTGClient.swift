@@ -32,12 +32,21 @@ public final class AsyncHttpTGClient: TGClientPrtcl, @unchecked Sendable {
 		let request = try makeRequest(url: url, params: params, as: mediaType)
 		let clientResponse = try await client.execute(request, timeout: .seconds(30))
 
+		// Collected before the status check on purpose: Telegram puts the reason — and a
+		// `retry_after` on a 429 — in the body of the very responses that used to be discarded.
+		// `getUpdates` can also return more than the old 1 MB allowed for.
+		let buffer = try await clientResponse.body.collect(upTo: 10 * 1024 * 1024)
+
 		guard clientResponse.status == .ok else {
-			throw BotError(type: .network, reason: "Invalid response status: \(clientResponse.status)")
+			let reason = TelegramFailure.describe(
+				status: clientResponse.status.code,
+				body: Data(buffer.readableBytesView)
+			)
+			log.error("\(reason)")
+			throw BotError(type: .network, reason: reason)
 		}
 
-		let data = try await clientResponse.body.collect(upTo: 1024 * 1024)  // 1 MB limit
-		let telegramContainer: TGTelegramContainer<Response> = try JSONDecoder().decode(TGTelegramContainer<Response>.self, from: data)
+		let telegramContainer: TGTelegramContainer<Response> = try JSONDecoder().decode(TGTelegramContainer<Response>.self, from: buffer)
 		return try processContainer(telegramContainer)
 	}
 

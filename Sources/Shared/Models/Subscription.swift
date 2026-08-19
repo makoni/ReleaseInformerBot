@@ -8,7 +8,7 @@
 import CouchDBClient
 import Foundation
 
-public struct Subscription: CouchDBRepresentable {
+public struct Subscription: CouchDBRepresentable, Equatable {
 	internal init(_id: String = NSUUID().uuidString, _rev: String? = nil, bundleID: String, url: String, title: String, version: [String], chats: Set<Int64>) {
 		self._id = _id
 		self._rev = _rev

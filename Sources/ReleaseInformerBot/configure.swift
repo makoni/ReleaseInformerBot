@@ -135,7 +135,11 @@ private func loadConfig(for app: Application) async throws -> ConfigReader {
 			let jsonProvider = try await FileProvider<JSONSnapshot>(filePath: FilePath(candidatePath))
 			providers.append(jsonProvider)
 		} catch {
-			logger.warning("Failed to load configuration file at \(candidatePath): \(error)")
+			// Every other bootstrap failure in this file is fatal. Carrying on here would fall
+			// back to the CouchConfig defaults — a different database than the operator asked
+			// for — and look like an empty subscription list rather than a misconfiguration.
+			logger.critical("Configuration file at \(candidatePath) could not be read: \(error)")
+			throw error
 		}
 	} else if let configuredPath {
 		logger.warning("Configuration file not found at \(configuredPath). Proceeding with environment variables only.")
