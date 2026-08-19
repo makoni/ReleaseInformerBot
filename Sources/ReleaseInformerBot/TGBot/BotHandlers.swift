@@ -36,30 +36,23 @@ final class BotHandlers {
 		await dispatcher.add(
 			TGCommandHandler(commands: ["/list"]) { update in
 				guard let chatID = update.message?.chat.id else { return }
-				var subscriptions = try await dbManager.search(byChatID: chatID)
 
-                if subscriptions.count > 10 {
-                    var chunk: [Subscription] = []
-                    while subscriptions.count > 0 {
-                        chunk.append(subscriptions.removeFirst())
+				do {
+					let subscriptions = try await dbManager.search(byChatID: chatID)
 
-                        if chunk.count >= 10 {
-                            let message = Self.makeListMessage(chunk)
-                            chunk.removeAll()
-                            try await update.message?.reply(text: message, bot: bot, parseMode: .html)
-                        }
-                    }
+					guard !subscriptions.isEmpty else {
+						try await update.message?.reply(text: Self.makeListMessage([]), bot: bot, parseMode: .html)
+						return
+					}
 
-                    if chunk.count > 0 {
-                        let message = Self.makeListMessage(chunk)
-                        chunk.removeAll()
-                        try await update.message?.reply(text: message, bot: bot, parseMode: .html)
-                    }
-
-                    return
-                }
-				let message = Self.makeListMessage(subscriptions)
-				try await update.message?.reply(text: message, bot: bot, parseMode: .html)
+					// Telegram caps message length, so a long list goes out in pages.
+					for page in subscriptions.chunked(into: 10) {
+						let message = Self.makeListMessage(page)
+						try await update.message?.reply(text: message, bot: bot, parseMode: .html)
+					}
+				} catch {
+					await Self.replyWithFailure(error, to: update, bot: bot, log: dispatcher.log)
+				}
 			})
 	}
 
@@ -69,10 +62,14 @@ final class BotHandlers {
 				guard var searchString = update.message?.text else { return }
 				searchString = String(searchString.dropFirst("/search".count)).trimmingCharacters(in: .whitespacesAndNewlines)
 
-				let searchResults = try await searchManager.search(byTitle: searchString)
-				let message = Self.makeSearchResultsMessage(searchResults)
+				do {
+					let searchResults = try await searchManager.search(byTitle: searchString)
+					let message = Self.makeSearchResultsMessage(searchResults)
 
-				try await update.message?.reply(text: message, bot: bot, parseMode: .html)
+					try await update.message?.reply(text: message, bot: bot, parseMode: .html)
+				} catch {
+					await Self.replyWithFailure(error, to: update, bot: bot, log: dispatcher.log)
+				}
 			})
 	}
 
@@ -83,14 +80,18 @@ final class BotHandlers {
 				guard var searchString = update.message?.text else { return }
 				searchString = String(searchString.dropFirst("/del".count)).trimmingCharacters(in: .whitespacesAndNewlines)
 
-				guard let subscription = try await dbManager.unsubscribeFromNewVersions(searchString, forChatID: chatID) else {
-					let message = "Subscription for <b>\(searchString)</b> not found"
-					try await update.message?.reply(text: message, bot: bot, parseMode: .html)
-					return
-				}
+				do {
+					guard let subscription = try await dbManager.unsubscribeFromNewVersions(searchString, forChatID: chatID) else {
+						let message = "Subscription for <b>\(searchString.escapedForTelegramHTML)</b> not found"
+						try await update.message?.reply(text: message, bot: bot, parseMode: .html)
+						return
+					}
 
-				let message = "<b>\(subscription.title)</b> with bundle ID <b>\(subscription.bundleID)</b> has been removed from your subscriptions."
-				try await update.message?.reply(text: message, bot: bot, parseMode: .html)
+					let message = "<b>\(subscription.title.escapedForTelegramHTML)</b> with bundle ID <b>\(subscription.bundleID.escapedForTelegramHTML)</b> has been removed from your subscriptions."
+					try await update.message?.reply(text: message, bot: bot, parseMode: .html)
+				} catch {
+					await Self.replyWithFailure(error, to: update, bot: bot, log: dispatcher.log)
+				}
 			})
 	}
 
@@ -101,17 +102,24 @@ final class BotHandlers {
 				guard var searchString = update.message?.text else { return }
 				searchString = String(searchString.dropFirst("/add".count)).trimmingCharacters(in: .whitespacesAndNewlines)
 
-				let searchResults = try await searchManager.search(byBundleID: searchString)
-				guard let result = searchResults.first else {
-					let message = Self.makeSearchResultsMessage([])
+				do {
+					let searchResults = try await searchManager.search(byBundleID: searchString)
+					// The watcher prefers the iOS entry, so the baseline version recorded here
+					// has to come from the same one — otherwise the first sweep announces the
+					// other platform's version as brand new.
+					guard let result = searchResults.first(where: \.isiOSApp) ?? searchResults.first else {
+						let message = Self.makeSearchResultsMessage([])
+						try await update.message?.reply(text: message, bot: bot, parseMode: .html)
+						return
+					}
+
+					try await dbManager.subscribeForNewVersions(result, forChatID: chatID)
+
+					let message = "<b>\(result.title.escapedForTelegramHTML)</b> with bundle ID <b>\(result.bundleID.escapedForTelegramHTML)</b> has been added to your subscriptions. I will inform you when a new version will be released."
 					try await update.message?.reply(text: message, bot: bot, parseMode: .html)
-					return
+				} catch {
+					await Self.replyWithFailure(error, to: update, bot: bot, log: dispatcher.log)
 				}
-
-				try await dbManager.subscribeForNewVersions(result, forChatID: chatID)
-
-				let message = "<b>\(result.title)</b> with bundle ID <b>\(result.bundleID)</b> has been added to your subscriptions. I will inform you when a new version will be released."
-				try await update.message?.reply(text: message, bot: bot, parseMode: .html)
 			})
 	}
 
@@ -175,15 +183,47 @@ final class BotHandlers {
 				)
 				try await bot.answerCallbackQuery(params: params)
 
-				let subscriptions = try await dbManager.search(byChatID: userId)
-				let message = Self.makeListMessage(subscriptions)
+				do {
+					let subscriptions = try await dbManager.search(byChatID: userId)
+					let message = Self.makeListMessage(subscriptions)
 
-				try await bot.sendMessage(params: .init(chatId: .chat(userId), text: message, parseMode: .html))
+					try await bot.sendMessage(params: .init(chatId: .chat(userId), text: message, parseMode: .html))
+				} catch {
+					dispatcher.log.error("Subscriptions list failed: \(error)")
+					_ = try? await bot.sendMessage(
+						params: .init(chatId: .chat(userId), text: Self.genericFailureText, parseMode: .html)
+					)
+				}
 			})
 	}
 }
 
 extension BotHandlers {
+	static let genericFailureText = "Sorry, something went wrong handling that. Please try again."
+	static let rateLimitedText = "The App Store is rate-limiting me at the moment. Please try again in a minute."
+
+	/// Turns a thrown handler error into something the user actually sees.
+	///
+	/// The Telegram SDK runs each handler in a detached task and does nothing with a throw
+	/// but log it, so without this a rate-limited App Store leaves the user staring at
+	/// silence — which is worse than the "No results found" they used to get.
+	static func failureText(for error: any Error) -> String {
+		guard let searchError = error as? SearchManager.SearchError, searchError == .rateLimited else {
+			return genericFailureText
+		}
+		return rateLimitedText
+	}
+
+	private static func replyWithFailure(
+		_ error: any Error,
+		to update: TGUpdate,
+		bot: TGBot,
+		log: Logger
+	) async {
+		log.error("Handler failed: \(error)")
+		try? await update.message?.reply(text: Self.failureText(for: error), bot: bot, parseMode: .html)
+	}
+
 	private static let helpText = """
 		Help: 
 
@@ -208,10 +248,10 @@ extension BotHandlers {
 		var text = "Search Results:\n\n"
 
 		for result in results[0..<min(10, results.count)] {
-			text += "<b>\(result.title)</b>\n"
-			text += "Version: <b>\(result.version)</b>\n"
-			text += "URL: \(result.url)\n"
-			text += "Bundle ID: <b>\(result.bundleID)</b>\n\n"
+			text += "<b>\(result.title.escapedForTelegramHTML)</b>\n"
+			text += "Version: <b>\(result.version.escapedForTelegramHTML)</b>\n"
+			text += "URL: \(result.url.escapedForTelegramHTML)\n"
+			text += "Bundle ID: <b>\(result.bundleID.escapedForTelegramHTML)</b>\n\n"
 		}
 
 		return text
@@ -225,10 +265,10 @@ extension BotHandlers {
 		var text = "Your Subscriptions:\n\n"
 
 		for subscription in subscriptions {
-			text += "<b>\(subscription.title)</b>\n"
-			text += "Latest Version: <b>\(subscription.version.last ?? "N/A")</b>\n"
-			text += "URL: \(subscription.url)\n"
-			text += "Bundle ID: <b>\(subscription.bundleID)</b>\n\n"
+			text += "<b>\(subscription.title.escapedForTelegramHTML)</b>\n"
+			text += "Latest Version: <b>\((subscription.version.last ?? "N/A").escapedForTelegramHTML)</b>\n"
+			text += "URL: \(subscription.url.escapedForTelegramHTML)\n"
+			text += "Bundle ID: <b>\(subscription.bundleID.escapedForTelegramHTML)</b>\n\n"
 		}
 
 		return text

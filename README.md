@@ -8,7 +8,7 @@ The Release Informer Bot provides a comprehensive subscription system for iOS ap
 
 1. **App Discovery**: Users can search for apps using the `/search <app name>` command, which queries the iTunes Search API
 2. **Subscription Management**: Users subscribe to specific apps using `/add <bundle_id>` and manage their subscriptions with `/list` and `/del <bundle_id>`
-3. **Release Monitoring**: A background watcher checks all subscriptions every 5 minutes using the iTunes API to detect new versions
+3. **Release Monitoring**: A background watcher continuously checks subscriptions against the iTunes API in batches of up to 100 apps per request, detecting new versions within minutes of release
 4. **Smart Notifications**: When a new version is detected, the bot sends formatted notifications to all subscribed users with release details including version number, release notes, and App Store link
 5. **Data Persistence**: All subscriptions are stored in CouchDB with efficient indexing for fast lookups by bundle ID and chat ID
 
@@ -30,7 +30,9 @@ The Release Informer Bot provides a comprehensive subscription system for iOS ap
   - `ReleaseInformerBot`: Main bot logic and Telegram handlers
   - `ReleaseWatcher`: Background monitoring service
   - `Shared`: Common models and database management
-- **Robust Monitoring**: Automated release checking with intelligent rate limiting and error handling
+- **Robust Monitoring**: Batched release checking that stays inside the iTunes API rate limit, with backoff and error handling
+- **Cache-Busting Lookups**: `itunes.apple.com` is served through Akamai with a 24-hour `max-age`, and repeat requests for the same URL are answered from cache without revalidation. Every lookup carries a unique cache key so new releases are seen within minutes rather than up to a day later
+- **Safe Unsubscribing**: A subscription is only dropped after the app is absent from several consecutive successful lookups, so a rate-limited or failed request can never silently unsubscribe users
 - **Scalable Storage**: CouchDB integration with optimized views for efficient queries
 - **Production Ready**: Comprehensive logging and error handling
 - **Real-time Notifications**: Instant notifications with rich formatting including release notes

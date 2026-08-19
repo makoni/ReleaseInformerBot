@@ -45,6 +45,8 @@ let package = Package(
             name: "ReleaseInformerBotTests",
             dependencies: [
                 .target(name: "ReleaseInformerBot"),
+                .target(name: "ReleaseWatcher"),
+                .target(name: "Shared"),
                 .product(name: "VaporTesting", package: "vapor"),
                 .product(name: "Configuration", package: "swift-configuration"),
             ]

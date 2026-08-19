@@ -109,6 +109,8 @@ public func configure(_ app: Application) async throws {
 	app.releaseInformerWatcher = releaseWatcher
 	await releaseWatcher.setBot(bot)
 	await releaseWatcher.start()
+	// Without this the watcher's loops keep polling past app shutdown.
+	app.lifecycle.use(ReleaseWatcherLifecycle(watcher: releaseWatcher))
 
 	// uncomment to serve files from /Public folder
 	// app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
@@ -163,4 +165,13 @@ private func makeCouchConfig(using config: ConfigReader) -> CouchConfig {
 		password: password,
 		timeout: Int64(timeout)
 	)
+}
+
+/// Stops the release watcher when the application shuts down.
+private struct ReleaseWatcherLifecycle: LifecycleHandler {
+	let watcher: ReleaseWatcher
+
+	func shutdownAsync(_ application: Application) async {
+		await watcher.stop()
+	}
 }
