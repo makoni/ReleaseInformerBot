@@ -36,19 +36,6 @@ public struct CouchConfig: Sendable {
 	}
 }
 
-fileprivate func makeClient(for config: CouchConfig) -> CouchDBClient {
-	CouchDBClient(
-		config: .init(
-			couchProtocol: config.couchProtocol,
-			couchHost: config.host,
-			couchPort: config.port,
-			userName: config.user,
-			userPassword: config.password,
-			requestsTimeout: config.timeout
-		)
-	)
-}
-
 public extension CouchConfig {
 	static func makeProtocol(_ value: String) -> CouchDBClient.CouchDBProtocol {
 		CouchDBClient.CouchDBProtocol(rawValue: value.lowercased()) ?? .http
@@ -76,18 +63,16 @@ public actor DBManager {
 
 	// MARK: - Reading
 
-	/// How many view rows are fetched per request.
+	/// Rows fetched per view request.
 	///
-	/// The `by_bundle` view emits whole documents, so an unpaged read grows without bound and
-	/// eventually exceeds any body limit — at which point the watcher stops checking
-	/// *everything*, with only a log line to say so.
-	static let viewPageSize = 500
+	/// Sized against the 10 MB `couchdb-swift` will collect, not against anything larger: the
+	/// views emit whole documents, and a single popular app's document carries every
+	/// subscriber's chat ID, so a page of 500 could exceed that on its own. An unpaged read
+	/// eventually fails outright, and then the watcher stops checking *everything*.
+	static let viewPageSize = 100
 
-	/// Generous, because a page is already bounded by ``viewPageSize``.
-	static let maxResponseBytes = 64 * 1024 * 1024
-
-	private static let byBundleView = "_design/list/_view/by_bundle"
-	private static let byChatView = "_design/list/_view/by_chat"
+	private static let byBundleURI = CouchDBDocumentStore.viewURI(CouchDBDocumentStore.byBundleView)
+	private static let byChatURI = CouchDBDocumentStore.viewURI(CouchDBDocumentStore.byChatView)
 
 	private func view(
 		uri: String,
@@ -95,14 +80,14 @@ public actor DBManager {
 	) async throws -> LenientRowsResponse<Subscription> {
 		let (statusCode, body) = try await store.fetchView(uri: uri, queryItems: queryItems)
 
-		// The library only throws for 401 and 404, so without this a 500 or a proxy error page
-		// reaches the decoder and is reported as a model problem — or worse, as "no apps".
 		try CouchStatus.validate(statusCode: statusCode)
 
 		let decoded = try JSONDecoder().decode(LenientRowsResponse<Subscription>.self, from: body)
 
-		if decoded.skippedRowCount > 0 {
-			logger.error("Skipped \(decoded.skippedRowCount) unreadable subscription document(s) from \(uri).")
+		if !decoded.skippedRowIDs.isEmpty {
+			logger.error(
+				"Skipped unreadable subscription document(s) from \(uri): \(decoded.skippedRowIDs.joined(separator: ", "))"
+			)
 		}
 
 		return decoded
@@ -113,25 +98,33 @@ public actor DBManager {
 	/// Plural on purpose: the database does not enforce one document per app, and taking only
 	/// the first is how a duplicate's subscribers became unreachable.
 	private func subscriptions(forBundleID bundleID: String) async throws -> [Subscription] {
-		try await view(
-			uri: Self.byBundleView,
-			queryItems: [URLQueryItem(name: "key", value: "\"\(bundleID)\"")]
-		).values
+		try await view(uri: Self.byBundleURI, queryItems: ViewQuery.rows(matching: .string(bundleID))).values
 	}
 
 	public func search(byChatID chatID: Int64) async throws -> [Subscription] {
-		try await view(
-			uri: Self.byChatView,
-			queryItems: [URLQueryItem(name: "key", value: "\(chatID)")]
-		).values
+		try await view(uri: Self.byChatURI, queryItems: ViewQuery.rows(matching: .number(chatID))).values
 	}
 
 	// MARK: - Writing
 
-	public func subscribeForNewVersions(_ result: SearchResult, forChatID chatID: Int64) async throws {
+	/// Whether `/add` actually changed anything.
+	public enum SubscribeOutcome: Sendable, Equatable {
+		case subscribed
+		case alreadySubscribed
+	}
+
+	@discardableResult
+	public func subscribeForNewVersions(
+		_ result: SearchResult,
+		forChatID chatID: Int64
+	) async throws -> SubscribeOutcome {
+		var outcome = SubscribeOutcome.subscribed
+
 		try await resolvingConflicts {
 			let existing = try await self.subscriptions(forBundleID: result.bundleID)
 			let plan = SubscriptionPlanner.subscribe(result, chatID: chatID, existing: existing)
+
+			outcome = plan.alreadySubscribed ? .alreadySubscribed : .subscribed
 
 			// The keeper is written before the duplicates go, so an interruption can only
 			// leave extra documents behind — never lose a subscriber.
@@ -145,10 +138,12 @@ public actor DBManager {
 			}
 
 			for duplicate in plan.deletions {
-				try await self.deleteSubscription(duplicate)
+				try await self.store.delete(duplicate)
 				logger.info("Consolidated a duplicate subscription document for \(duplicate.bundleID).")
 			}
 		}
+
+		return outcome
 	}
 
 	public func unsubscribeFromNewVersions(_ bundleID: String, forChatID chatID: Int64) async throws -> Subscription? {
@@ -158,15 +153,20 @@ public actor DBManager {
 			let existing = try await self.subscriptions(forBundleID: bundleID)
 			let plan = SubscriptionPlanner.unsubscribe(chatID: chatID, from: existing)
 
+			// Kept from the first attempt that saw the chat: a retry after a partial write may
+			// legitimately find nothing left to remove, and reporting that as "not found"
+			// would deny a `/del` that already took effect.
+			if removedFrom == nil {
+				removedFrom = plan.removedFrom
+			}
+
 			for document in plan.updates {
 				_ = try await self.store.update(document)
 			}
 
 			for document in plan.deletions {
-				try await self.deleteSubscription(document)
+				try await self.store.delete(document)
 			}
-
-			removedFrom = plan.removedFrom
 		}
 
 		return removedFrom
@@ -177,24 +177,27 @@ public actor DBManager {
 		logger.info("Subscription for \(subscription.bundleID) has been deleted from the database.")
 	}
 
-	/// Re-runs `work` when CouchDB rejects a write because another task got there first.
+	/// Re-runs `work` when the store reports that someone else wrote first.
 	///
 	/// `DBManager` is an actor, but a read-modify-write suspends at every `await`, so two
 	/// `/add` commands for one app can both see no existing document. Keying documents by
-	/// bundle ID turns that into a 409 for the loser; re-reading then finds the winner's
+	/// bundle ID turns that into a conflict for the loser; re-reading then finds the winner's
 	/// document and merges into it, rather than quietly creating a second one.
 	private func resolvingConflicts(
 		attempts: Int = 3,
 		_ work: () async throws -> Void
 	) async throws {
-		for attempt in 1...attempts {
+		// The final attempt sits outside the loop so its failure is rethrown structurally,
+		// rather than depending on a `where` clause to fall through.
+		for attempt in 1..<max(1, attempts) {
 			do {
-				try await work()
-				return
-			} catch let error as CouchDBClientError where error.isDocumentConflict && attempt < attempts {
+				return try await work()
+			} catch StoreError.conflict {
 				logger.info("Document conflict on attempt \(attempt) of \(attempts); re-reading.")
 			}
 		}
+
+		try await work()
 	}
 }
 
@@ -202,42 +205,67 @@ public actor DBManager {
 extension DBManager {
 	public func getAllSubscriptions() async throws -> [Subscription] {
 		var all = [Subscription]()
-		var start: (key: String, id: String)?
+		var cursor: ViewCursor?
 
 		while true {
-			// One row beyond the page: if it arrives, it is where the next page starts.
-			var queryItems = [URLQueryItem(name: "limit", value: "\(Self.viewPageSize + 1)")]
-			if let start {
-				queryItems.append(URLQueryItem(name: "startkey", value: "\"\(start.key)\""))
-				queryItems.append(URLQueryItem(name: "startkey_docid", value: start.id))
-			}
-
-			let response = try await view(uri: Self.byBundleView, queryItems: queryItems)
+			let response = try await view(
+				uri: Self.byBundleURI,
+				queryItems: ViewQuery.page(size: Self.viewPageSize, after: cursor)
+			)
 
 			all += response.rows.prefix(Self.viewPageSize).compactMap(\.value)
 
-			// `startkey_docid` rather than `skip`, so duplicate keys spanning a page boundary
-			// are handled and paging does not get quadratically slower as the corpus grows.
-			guard response.rows.count > Self.viewPageSize,
-				let overflow = response.rows.last,
-				let key = overflow.key,
-				let id = overflow.id
-			else { break }
+			guard response.rows.count > Self.viewPageSize else { break }
 
-			start = (key, id)
+			guard let next = response.rows.last?.cursor else {
+				// A row whose key or id could not be read cannot be resumed from. Stopping
+				// here is a partial sweep, so say so rather than looking like a clean finish.
+				logger.error("Stopped paging \(Self.byBundleURI) early: the next page's cursor is unreadable.")
+				break
+			}
+
+			// Without this a key that fails to round-trip — or a lost `startkey_docid` —
+			// re-reads the same page forever, and the watcher spins instead of sweeping.
+			guard next != cursor else {
+				logger.error("Stopped paging \(Self.byBundleURI) early: the cursor stopped advancing at \(next.documentID).")
+				break
+			}
+
+			cursor = next
 		}
 
 		return all
 	}
 
+	/// Appends a version to a subscription's history.
+	///
+	/// Re-reads inside the retry rather than trusting the document passed in: the watcher hands
+	/// over a `Subscription` loaded when the sweep started, which may be many batches old, and
+	/// a `/add` landing in between bumps its `_rev`. This is the most frequent write in the
+	/// system, so losing it to a conflict costs an announcement every time it happens.
 	public func addNewVersion(_ version: String, forSubscription doc: Subscription) async throws {
-		var subscription = doc
-		subscription.version.append(version)
-		while subscription.version.count > 5 {
-			subscription.version.removeFirst()
-		}
+		try await resolvingConflicts {
+			let existing = try await self.subscriptions(forBundleID: doc.bundleID)
 
-		_ = try await store.update(subscription)
-		logger.info("New version \(version) has been added to subscription \(subscription.bundleID).")
+			guard var subscription = existing.first(where: { $0._id == doc._id }) ?? existing.first else {
+				throw StoreError.notFound
+			}
+
+			// Another task may have recorded it while this one waited.
+			guard !subscription.version.contains(version) else {
+				logger.info("Version \(version) already recorded for \(subscription.bundleID).")
+				return
+			}
+
+			subscription.title = doc.title
+			subscription.url = doc.url
+			subscription.version.append(version)
+			while subscription.version.count > 5 {
+				subscription.version.removeFirst()
+			}
+
+			_ = try await self.store.update(subscription)
+			logger.info("New version \(version) has been added to subscription \(subscription.bundleID).")
+		}
 	}
 }

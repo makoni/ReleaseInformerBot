@@ -35,6 +35,32 @@ enum TelegramFailure {
 		decode(body)?.parameters?.retryAfter
 	}
 
+	/// The largest delay we will honour, so a hostile or mistaken `retry_after` cannot park
+	/// the bot for hours.
+	static let maximumBackoff: Duration = .seconds(60)
+
+	/// How long to wait before letting a failure propagate.
+	///
+	/// `nil` for failures that will not pass on their own — retrying those slowly is no better
+	/// than retrying them quickly, and the caller should surface them immediately.
+	static func backoff(status: UInt, body: Data) -> Duration? {
+		if let retryAfter = retryAfter(in: body), retryAfter > 0 {
+			return min(.seconds(retryAfter), maximumBackoff)
+		}
+
+		switch status {
+		case 429, 500..<600:
+			// No hint given, but these do pass; a few seconds is enough to stop a hot loop.
+			return .seconds(5)
+		case 401, 403:
+			// A revoked or wrong token stays revoked. Still worth pacing, because the SDK
+			// will re-poll regardless and would otherwise spin.
+			return .seconds(30)
+		default:
+			return nil
+		}
+	}
+
 	/// A log-worthy description of a failed Telegram call.
 	static func describe(status: UInt, body: Data) -> String {
 		var parts = ["Telegram request failed with status \(status)"]

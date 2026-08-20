@@ -6,20 +6,20 @@
 import Foundation
 
 /// The writes needed to add a chat to an app's subscription.
-public struct SubscribePlan: Sendable, Equatable {
-	public var insert: Subscription?
-	public var update: Subscription?
+struct SubscribePlan: Sendable, Equatable {
+	var insert: Subscription?
+	var update: Subscription?
 	/// Duplicate documents being folded into the one that is kept.
-	public var deletions: [Subscription]
-	public var alreadySubscribed: Bool
+	var deletions: [Subscription]
+	var alreadySubscribed: Bool
 }
 
 /// The writes needed to remove a chat from an app's subscription.
-public struct UnsubscribePlan: Sendable, Equatable {
-	public var updates: [Subscription]
-	public var deletions: [Subscription]
+struct UnsubscribePlan: Sendable, Equatable {
+	var updates: [Subscription]
+	var deletions: [Subscription]
 	/// `nil` when this chat was not subscribed to the app at all.
-	public var removedFrom: Subscription?
+	var removedFrom: Subscription?
 }
 
 /// Works out what to write, given every document currently stored for one bundle ID.
@@ -27,17 +27,31 @@ public struct UnsubscribePlan: Sendable, Equatable {
 /// Keeping the decisions here — rather than interleaved with the database calls — is what
 /// makes them testable, and these are decisions that cost users their subscriptions when
 /// they go wrong.
-public enum SubscriptionPlanner {
-	public static func subscribe(
+enum SubscriptionPlanner {
+	/// Whether a bundle ID is safe to use as a CouchDB document id.
+	///
+	/// `couchdb-swift` interpolates the id straight into the document URL path with no
+	/// escaping, so a value containing `/` would address a different endpoint, and CouchDB
+	/// reserves ids beginning with `_`. Apple's bundle IDs never look like that — this is a
+	/// guard for ids read back out of the database, and for the day Apple surprises us.
+	static func isUsableAsDocumentID(_ bundleID: String) -> Bool {
+		guard (1...200).contains(bundleID.count), !bundleID.hasPrefix("_") else { return false }
+		let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-")
+		return bundleID.unicodeScalars.allSatisfy { allowed.contains($0) }
+	}
+
+	static func subscribe(
 		_ result: SearchResult,
 		chatID: Int64,
 		existing: [Subscription]
 	) -> SubscribePlan {
 		guard let keeper = existing.first else {
 			// The document is keyed by bundle ID so that CouchDB, not luck, decides which of
-			// two concurrent subscribers wins: the loser gets a 409 and re-reads.
+			// two concurrent subscribers wins: the loser gets a 409 and re-reads. Anything
+			// that cannot safely be an id falls back to a generated one — it loses the
+			// uniqueness guarantee, but it cannot address the wrong endpoint.
 			let subscription = Subscription(
-				_id: result.bundleID,
+				_id: isUsableAsDocumentID(result.bundleID) ? result.bundleID : NSUUID().uuidString,
 				bundleID: result.bundleID,
 				url: result.url,
 				title: result.title,
@@ -62,7 +76,7 @@ public enum SubscriptionPlanner {
 		return SubscribePlan(insert: nil, update: merged, deletions: duplicates, alreadySubscribed: false)
 	}
 
-	public static func unsubscribe(chatID: Int64, from existing: [Subscription]) -> UnsubscribePlan {
+	static func unsubscribe(chatID: Int64, from existing: [Subscription]) -> UnsubscribePlan {
 		var plan = UnsubscribePlan(updates: [], deletions: [], removedFrom: nil)
 
 		for document in existing where document.chats.contains(chatID) {

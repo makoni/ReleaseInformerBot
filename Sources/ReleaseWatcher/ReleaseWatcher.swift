@@ -288,7 +288,7 @@ public actor ReleaseWatcher {
 			try await bot.sendMessage(
 				params: .init(chatId: .chat(notification.chatID), text: notification.text, parseMode: .html)
 			)
-			logger.info("Notification sent to chat: \(notification.chatID)")
+			logger.debug("Notification sent to chat: \(notification.chatID)")
 		} catch {
 			notification.attempts += 1
 
@@ -314,6 +314,9 @@ public actor ReleaseWatcher {
 		}
 	}
 
+	/// Telegram rejects a message longer than this outright.
+	static let maxMessageLength = 4096
+
 	static func notificationText(for result: SearchResult) -> String {
 		var text = "<b>New Version Released!</b>\n\n"
 		text += "<b>\(result.title.escapedForTelegramHTML)</b>\n"
@@ -321,10 +324,31 @@ public actor ReleaseWatcher {
 		text += "URL: \(result.url.escapedForTelegramHTML)\n"
 		text += "<b>Bundle ID:</b> \(result.bundleID.escapedForTelegramHTML)\n\n"
 
-		if let releaseNotes = result.releaseNotes {
-			text += "<b>Release Notes:</b>\n\(releaseNotes.escapedForTelegramHTML)\n\n"
+		guard let releaseNotes = result.releaseNotes else { return text }
+
+		// Escaping expands `&` fivefold, so notes well under the limit can cross it once
+		// escaped — and an over-long message is a 400, which costs the announcement for good
+		// because the version has already been recorded.
+		let header = "<b>Release Notes:</b>\n"
+		let ellipsis = "…"
+		let budget = Self.maxMessageLength - text.count - header.count - "\n\n".count
+
+		guard budget > ellipsis.count else { return text }
+
+		let escaped = releaseNotes.escapedForTelegramHTML
+		guard escaped.count > budget else { return text + header + escaped + "\n\n" }
+
+		// Accumulated one source character at a time. Trimming the escaped string by length
+		// would cut an entity in half — `&lt;` becoming `&l` — which Telegram rejects just as
+		// firmly as the over-long message did.
+		var notes = ""
+		let limit = budget - ellipsis.count
+		for character in releaseNotes {
+			let piece = String(character).escapedForTelegramHTML
+			guard notes.count + piece.count <= limit else { break }
+			notes += piece
 		}
 
-		return text
+		return text + header + notes + ellipsis + "\n\n"
 	}
 }

@@ -54,7 +54,12 @@ enum ITunesURLBuilder {
 		case .bundleIDs(let bundleIDs):
 			// Duplicates would be wasted work, and two subscription documents for one
 			// bundle ID is a state the database does not prevent.
-			let uniqueIDs = NSOrderedSet(array: bundleIDs).array as? [String] ?? bundleIDs
+			//
+			// Deliberately not `NSOrderedSet`: on swift-corelibs-foundation its `.array`
+			// returns every element, and the `as? [String]` cast still succeeds — so the
+			// dedupe silently did nothing on Linux, which is a deployment platform here.
+			var seen = Set<String>()
+			let uniqueIDs = bundleIDs.filter { seen.insert($0).inserted }
 			guard !uniqueIDs.isEmpty else { return nil }
 
 			builder.path = "/lookup"

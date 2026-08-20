@@ -66,6 +66,36 @@ struct NotificationTextTests {
 		#expect(escaped.contains("Barnes &amp; Noble &lt;Reader&gt;"))
 	}
 
+	/// Escaping expands `&` fivefold, so notes comfortably under Telegram's limit can cross it
+	/// once escaped. An over-long message is rejected with a 400 — and because the version has
+	/// already been recorded, that release is never announced again.
+	@Test("A message is kept inside Telegram's length limit")
+	func staysWithinTelegramLimit() {
+		let notes = String(repeating: "&", count: 5000)
+		let text = ReleaseWatcher.notificationText(for: result(releaseNotes: notes))
+
+		#expect(text.count <= ReleaseWatcher.maxMessageLength)
+		#expect(text.contains("<b>MyApp</b>"))
+		#expect(text.contains("Release Notes"))
+	}
+
+	@Test("Truncation does not cut an HTML entity in half")
+	func truncatesWholeEntities() {
+		let text = ReleaseWatcher.notificationText(for: result(releaseNotes: String(repeating: "<", count: 5000)))
+
+		#expect(text.count <= ReleaseWatcher.maxMessageLength)
+		// Everything after the header must be complete `&lt;` entities plus the ellipsis.
+		let body = text.components(separatedBy: "<b>Release Notes:</b>\n").last ?? ""
+		#expect(!body.replacingOccurrences(of: "&lt;", with: "").contains("&"))
+	}
+
+	@Test("Notes that already fit are not touched")
+	func leavesShortNotesAlone() {
+		let text = ReleaseWatcher.notificationText(for: result(releaseNotes: "· Fixed a crash"))
+		#expect(text.contains("· Fixed a crash"))
+		#expect(!text.contains("…"))
+	}
+
 	@Test("The bold tags the bot adds itself are left intact")
 	func keepsIntentionalMarkup() {
 		let text = ReleaseWatcher.notificationText(for: result(releaseNotes: "<3"))

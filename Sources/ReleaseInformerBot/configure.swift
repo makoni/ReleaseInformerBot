@@ -69,6 +69,21 @@ public func configure(_ app: Application) async throws {
 	}
 
 	let couchConfig = makeCouchConfig(using: config)
+
+	// Without this a typo'd config path starts a bot that quietly talks to the built-in
+	// defaults — a different database than the operator meant — and that looks exactly like
+	// every user having no subscriptions. Never log the password.
+	logger.info(
+		"""
+		Using CouchDB at \(couchConfig.couchProtocol.rawValue)://\(couchConfig.host):\(couchConfig.port) 		as \(couchConfig.user)
+		"""
+	)
+	if couchConfig.password.isEmpty {
+		logger.critical(
+			"CouchDB password is empty. Set couch.password or COUCHDB_PASS unless this server runs in admin party mode."
+		)
+	}
+
 	let dbManager = DBManager(couchConfig: couchConfig)
 	app.releaseInformerDBManager = dbManager
 

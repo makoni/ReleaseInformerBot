@@ -6,7 +6,7 @@
 import Foundation
 
 /// Repairs iTunes API payloads that are not quite valid JSON.
-public enum JSONSanitizer {
+enum JSONSanitizer {
 	/// Escapes raw control characters that appear inside JSON string literals.
 	///
 	/// Apple's `releaseNotes` regularly contain unescaped newlines, and occasionally other
@@ -16,7 +16,7 @@ public enum JSONSanitizer {
 	///
 	/// Iteration is over Unicode scalars rather than `Character` on purpose: Swift treats
 	/// CRLF as a single grapheme cluster, so a `Character`-based pass walks straight past it.
-	public static func repairingControlCharacters(in input: String) -> String {
+	static func repairingControlCharacters(in input: String) -> String {
 		var result = ""
 		result.reserveCapacity(input.unicodeScalars.count)
 

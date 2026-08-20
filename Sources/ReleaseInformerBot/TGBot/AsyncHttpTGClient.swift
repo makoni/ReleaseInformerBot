@@ -38,11 +38,18 @@ public final class AsyncHttpTGClient: TGClientPrtcl, @unchecked Sendable {
 		let buffer = try await clientResponse.body.collect(upTo: 10 * 1024 * 1024)
 
 		guard clientResponse.status == .ok else {
-			let reason = TelegramFailure.describe(
-				status: clientResponse.status.code,
-				body: Data(buffer.readableBytesView)
-			)
+			let body = Data(buffer.readableBytesView)
+			let reason = TelegramFailure.describe(status: clientResponse.status.code, body: body)
 			log.error("\(reason)")
+
+			// The SDK's long-polling loop catches whatever we throw and immediately re-polls
+			// with no delay, so a persistent 401 or a 429 would otherwise become an
+			// unthrottled request loop writing two error lines per iteration. Waiting here is
+			// the only place in this path that can apply back-pressure.
+			if let delay = TelegramFailure.backoff(status: clientResponse.status.code, body: body) {
+				try? await Task.sleep(for: delay)
+			}
+
 			throw BotError(type: .network, reason: reason)
 		}
 

@@ -65,7 +65,7 @@ struct LenientRowsResponseTests {
 
 		#expect(response.values.map(\.bundleID) == ["a.b.c", "d.e.f"])
 		#expect(response.totalRows == 2)
-		#expect(response.skippedRowCount == 0)
+		#expect(response.skippedRowIDs.isEmpty)
 	}
 
 	/// The whole point. `RowsResponse` decodes all-or-nothing, so a single malformed document
@@ -83,14 +83,14 @@ struct LenientRowsResponseTests {
 		let response = try decode(json)
 
 		#expect(response.values.map(\.bundleID) == ["a.b.c", "d.e.f"])
-		#expect(response.skippedRowCount == 1)
+		#expect(response.skippedRowIDs == ["bad"])
 	}
 
 	@Test("An empty view decodes to nothing")
 	func decodesEmptyView() throws {
 		let response = try decode("{\"total_rows\":0,\"offset\":0,\"rows\":[]}")
 		#expect(response.values.isEmpty)
-		#expect(response.skippedRowCount == 0)
+		#expect(response.skippedRowIDs.isEmpty)
 	}
 
 	/// A CouchDB error body has no `rows` at all, and must not be mistaken for an empty view
@@ -272,35 +272,168 @@ struct UnsubscribePlannerTests {
 	}
 }
 
-@Suite("CouchDB conflict detection")
-struct CouchConflictTests {
+@Suite("CouchDB error mapping")
+struct StoreErrorMappingTests {
 	/// `CouchDBError` has no public initialiser, so it is built the way the library builds it.
 	private func couchError(_ error: String, reason: String = "Document update conflict.") throws -> CouchDBError {
 		let json = "{\"error\":\"\(error)\",\"reason\":\"\(reason)\"}"
 		return try JSONDecoder().decode(CouchDBError.self, from: Data(json.utf8))
 	}
 
-	/// A 409 is the signal that another task inserted the same document first, and the right
-	/// answer is to re-read and merge rather than to give up.
-	@Test("An insert conflict is recognised")
-	func recognisesInsertConflict() throws {
-		#expect(CouchDBClientError.insertError(error: try couchError("conflict")).isDocumentConflict)
+	/// A conflict is the signal that another task wrote first, and the right answer is to
+	/// re-read and merge. The library reports it as an operation-specific case, so every one
+	/// of them has to map.
+	@Test("A conflict is recognised whichever operation reported it")
+	func mapsConflicts() throws {
+		let conflict = try couchError("conflict")
+
+		#expect(StoreError(.conflictError(error: conflict)) == .conflict)
+		#expect(StoreError(.insertError(error: conflict)) == .conflict)
+		#expect(StoreError(.updateError(error: conflict)) == .conflict)
+		#expect(StoreError(.deleteError(error: conflict)) == .conflict)
 	}
 
-	@Test("An update conflict is recognised")
-	func recognisesUpdateConflict() throws {
-		#expect(CouchDBClientError.updateError(error: try couchError("conflict")).isDocumentConflict)
+	@Test("A missing document maps to notFound")
+	func mapsNotFound() throws {
+		#expect(StoreError(.notFound(error: try couchError("not_found", reason: "missing"))) == .notFound)
+		#expect(StoreError(.getError(error: try couchError("not_found", reason: "missing"))) == .notFound)
 	}
 
-	@Test("The library's dedicated conflict case is recognised")
-	func recognisesDedicatedConflictCase() throws {
-		#expect(CouchDBClientError.conflictError(error: try couchError("conflict")).isDocumentConflict)
+	@Test("Bad credentials map to unauthorized")
+	func mapsUnauthorized() throws {
+		#expect(StoreError(.unauthorized) == .unauthorized)
+		#expect(StoreError(.getError(error: try couchError("unauthorized", reason: "nope"))) == .unauthorized)
 	}
 
-	@Test("Other CouchDB errors are not conflicts")
-	func otherErrorsAreNotConflicts() throws {
-		let notFound = CouchDBClientError.getError(error: try couchError("not_found", reason: "missing"))
-		#expect(!notFound.isDocumentConflict)
-		#expect(!CouchDBClientError.unknownResponse.isDocumentConflict)
+	@Test("Anything else is an unexpected response rather than a conflict")
+	func mapsEverythingElse() throws {
+		#expect(StoreError(.unknownResponse) == .unexpectedResponse)
+		#expect(StoreError(.noData) == .unexpectedResponse)
+		#expect(StoreError(.idMissing) == .unexpectedResponse)
+		#expect(StoreError(.getError(error: try couchError("badarg", reason: "bad"))) == .unexpectedResponse)
+	}
+}
+
+@Suite("Delete failure mapping")
+struct DeleteFailureMappingTests {
+	private func couchError(_ error: String) throws -> CouchDBError {
+		let json = "{\"error\":\"\(error)\",\"reason\":\"whatever\"}"
+		return try JSONDecoder().decode(CouchDBError.self, from: Data(json.utf8))
+	}
+
+	/// `couchdb-swift` handles only 404 on delete; a 409 body reaches `JSONDecoder` and fails
+	/// there, so without translating a decoding failure the retry loop never sees a delete
+	/// conflict — the write where consolidating duplicates needs it most.
+	@Test("A decoding failure from a delete is treated as a conflict")
+	func decodingFailureIsAConflict() {
+		// Exactly what the library produces: CouchDB's conflict body decoded as though it were
+		// a `CouchUpdateResponse`.
+		let conflictBody = Data(#"{"error":"conflict","reason":"Document update conflict."}"#.utf8)
+		do {
+			_ = try JSONDecoder().decode(CouchUpdateResponse.self, from: conflictBody)
+			Issue.record("Expected the conflict body to fail decoding")
+		} catch {
+			#expect(error is DecodingError)
+			#expect(CouchDBDocumentStore.storeError(fromDeleteFailure: error) == .conflict)
+		}
+	}
+
+	@Test("A reported conflict stays a conflict")
+	func reportedConflictPassesThrough() throws {
+		let error = CouchDBClientError.deleteError(error: try couchError("conflict"))
+		#expect(CouchDBDocumentStore.storeError(fromDeleteFailure: error) == .conflict)
+	}
+
+	@Test("A missing document is not mistaken for a conflict")
+	func notFoundIsPreserved() throws {
+		let error = CouchDBClientError.deleteError(error: try couchError("not_found"))
+		#expect(CouchDBDocumentStore.storeError(fromDeleteFailure: error) == .notFound)
+	}
+
+	@Test("An unrecognised failure is not silently retried forever")
+	func unknownFailureIsNotAConflict() {
+		struct Odd: Error {}
+		#expect(CouchDBDocumentStore.storeError(fromDeleteFailure: Odd()) == .unexpectedResponse)
+	}
+}
+
+@Suite("View query construction")
+struct ViewQueryTests {
+	/// CouchDB answers `400 bad_request` for a string key that is not a JSON literal, so the
+	/// quoting is part of the contract — asserted here rather than re-implemented in a fake.
+	@Test("A string key is sent as a JSON string")
+	func quotesStringKeys() {
+		#expect(ViewQuery.rows(matching: .string("com.my.app")) == [
+			URLQueryItem(name: "key", value: "\"com.my.app\"")
+		])
+	}
+
+	@Test("A numeric key is sent unquoted")
+	func leavesNumbersUnquoted() {
+		#expect(ViewQuery.rows(matching: .number(-1001234567890)) == [
+			URLQueryItem(name: "key", value: "-1001234567890")
+		])
+	}
+
+	@Test("A key containing quotes or backslashes is escaped, not concatenated")
+	func escapesAwkwardKeys() {
+		#expect(ViewKey.string("a\"b").jsonLiteral == "\"a\\\"b\"")
+		#expect(ViewKey.string("a\\b").jsonLiteral == "\"a\\\\b\"")
+	}
+
+	@Test("A page asks for one row beyond itself, to learn where the next one starts")
+	func pageAsksForOneExtraRow() {
+		#expect(ViewQuery.page(size: 100) == [URLQueryItem(name: "limit", value: "101")])
+	}
+
+	/// `startkey` alone is not enough: `by_bundle` allows several documents per key, so
+	/// without `startkey_docid` a page boundary inside a run of duplicates never advances.
+	@Test("A continued page carries both the key and the document id")
+	func continuedPageCarriesDocumentID() {
+		let cursor = ViewCursor(key: .string("com.my.app"), documentID: "doc-7")
+		#expect(ViewQuery.page(size: 100, after: cursor) == [
+			URLQueryItem(name: "limit", value: "101"),
+			URLQueryItem(name: "startkey", value: "\"com.my.app\""),
+			URLQueryItem(name: "startkey_docid", value: "doc-7")
+		])
+	}
+}
+
+@Suite("Document id safety")
+struct DocumentIDTests {
+	/// The library interpolates the id straight into the document URL path with no escaping.
+	@Test("Ordinary bundle IDs are usable", arguments: [
+		"com.my.app", "org.videolan.vlc-ios", "a", "com.Example.App123"
+	])
+	func acceptsRealBundleIDs(bundleID: String) {
+		#expect(SubscriptionPlanner.isUsableAsDocumentID(bundleID))
+	}
+
+	@Test("Anything that could address a different endpoint is rejected", arguments: [
+		"", "_design/list", "../_users/admin", "a/b", "a b", "a?b", "a#b", "a%2Fb", "app\u{0}"
+	])
+	func rejectsDangerousIDs(bundleID: String) {
+		#expect(!SubscriptionPlanner.isUsableAsDocumentID(bundleID))
+	}
+
+	@Test("An absurdly long id is rejected")
+	func rejectsLongIDs() {
+		#expect(!SubscriptionPlanner.isUsableAsDocumentID(String(repeating: "a", count: 201)))
+	}
+
+	@Test("A bundle ID that cannot be an id still yields a usable document")
+	func fallsBackToAGeneratedID() throws {
+		let result = SearchResult(
+			title: "Odd",
+			bundleID: "../_users/admin",
+			url: "https://example.com",
+			version: "1.0"
+		)
+		let plan = SubscriptionPlanner.subscribe(result, chatID: 1, existing: [])
+		let insert = try #require(plan.insert)
+
+		#expect(insert._id != "../_users/admin")
+		#expect(SubscriptionPlanner.isUsableAsDocumentID(insert._id))
+		#expect(insert.bundleID == "../_users/admin")
 	}
 }

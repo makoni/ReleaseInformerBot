@@ -6,7 +6,6 @@
 //
 
 import Vapor
-import CouchDBClient
 import Shared
 import Logging
 import SwiftTelegramBot
@@ -113,9 +112,9 @@ final class BotHandlers {
 						return
 					}
 
-					try await dbManager.subscribeForNewVersions(result, forChatID: chatID)
+					let outcome = try await dbManager.subscribeForNewVersions(result, forChatID: chatID)
 
-					let message = "<b>\(result.title.escapedForTelegramHTML)</b> with bundle ID <b>\(result.bundleID.escapedForTelegramHTML)</b> has been added to your subscriptions. I will inform you when a new version will be released."
+					let message = Self.makeSubscribedMessage(for: result, outcome: outcome)
 					try await update.message?.reply(text: message, bot: bot, parseMode: .html)
 				} catch {
 					await Self.replyWithFailure(error, to: update, bot: bot, log: dispatcher.log)
@@ -255,6 +254,21 @@ extension BotHandlers {
 		}
 
 		return text
+	}
+
+	static func makeSubscribedMessage(
+		for result: SearchResult,
+		outcome: DBManager.SubscribeOutcome
+	) -> String {
+		let name = "<b>\(result.title.escapedForTelegramHTML)</b>"
+		let bundle = "<b>\(result.bundleID.escapedForTelegramHTML)</b>"
+
+		switch outcome {
+		case .subscribed:
+			return "\(name) with bundle ID \(bundle) has been added to your subscriptions. I will inform you when a new version will be released."
+		case .alreadySubscribed:
+			return "You are already subscribed to \(name) with bundle ID \(bundle)."
+		}
 	}
 
 	static func makeListMessage(_ subscriptions: [Subscription]) -> String {

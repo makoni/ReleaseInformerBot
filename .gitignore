@@ -5,3 +5,4 @@ launch.txt
 .build
 .vscode
 deploy.sh
+config/config.json

@@ -21,8 +21,8 @@ struct TelegramFailureTests {
 		let reason = TelegramFailure.describe(status: 429, body: Data(body.utf8))
 
 		#expect(reason.contains("429"))
-		#expect(reason.contains("retry after 30"))
-		#expect(reason.contains("retry_after: 30"))
+		// Telegram's own wording is the part worth pinning; the label around it is not.
+		#expect(reason.contains("Too Many Requests: retry after 30"))
 	}
 
 	@Test("A described failure without parameters still carries Telegram's reason")
@@ -34,22 +34,56 @@ struct TelegramFailureTests {
 		#expect(reason.contains("can't parse entities"))
 	}
 
+	/// Asserted in full: `describe` always begins with the status, so a `contains("502")` check
+	/// could never fail and would not notice a half-decoded body appending junk.
 	@Test("An unreadable body falls back to the status alone")
 	func fallsBackToStatus() {
-		let reason = TelegramFailure.describe(status: 502, body: Data("<html>bad gateway</html>".utf8))
-		#expect(reason.contains("502"))
+		#expect(
+			TelegramFailure.describe(status: 502, body: Data("<html>bad gateway</html>".utf8))
+				== "Telegram request failed with status 502"
+		)
 	}
 
 	@Test("An empty body falls back to the status alone")
 	func handlesEmptyBody() {
-		let reason = TelegramFailure.describe(status: 500, body: Data())
-		#expect(reason.contains("500"))
+		#expect(TelegramFailure.describe(status: 500, body: Data()) == "Telegram request failed with status 500")
 	}
 
-	@Test("The retry delay is available on its own for callers that can act on it")
+	@Test("The retry delay is available on its own")
 	func exposesRetryAfter() {
-		let body = #"{"ok":false,"error_code":429,"parameters":{"retry_after":7}}"#
-		#expect(TelegramFailure.retryAfter(in: Data(body.utf8)) == 7)
+		#expect(TelegramFailure.retryAfter(in: Data(#"{"ok":false,"parameters":{"retry_after":7}}"#.utf8)) == 7)
 		#expect(TelegramFailure.retryAfter(in: Data(#"{"ok":false}"#.utf8)) == nil)
+	}
+
+	/// The SDK's long-polling loop re-polls immediately on failure, so this is the only place
+	/// that can stop a revoked token or a 429 becoming an unthrottled request loop.
+	@Test("Telegram's own delay is honoured when it gives one")
+	func honoursRetryAfter() {
+		let body = Data(#"{"ok":false,"error_code":429,"parameters":{"retry_after":7}}"#.utf8)
+		#expect(TelegramFailure.backoff(status: 429, body: body) == .seconds(7))
+	}
+
+	@Test("An absurd delay is capped rather than parking the bot")
+	func capsRetryAfter() {
+		let body = Data(#"{"ok":false,"error_code":429,"parameters":{"retry_after":86400}}"#.utf8)
+		#expect(TelegramFailure.backoff(status: 429, body: body) == TelegramFailure.maximumBackoff)
+	}
+
+	@Test("Failures with no hint still get paced", arguments: [429, 500, 503])
+	func pacesUnhintedFailures(status: Int) {
+		let delay = TelegramFailure.backoff(status: UInt(status), body: Data())
+		#expect(delay != nil)
+		#expect(delay ?? .zero > .zero)
+	}
+
+	@Test("A revoked token is paced too, since the SDK will keep polling regardless")
+	func pacesAuthFailures() {
+		#expect(TelegramFailure.backoff(status: 401, body: Data()) != nil)
+	}
+
+	@Test("A failure that will not pass on its own is surfaced immediately")
+	func doesNotPaceClientErrors() {
+		#expect(TelegramFailure.backoff(status: 400, body: Data()) == nil)
+		#expect(TelegramFailure.backoff(status: 404, body: Data()) == nil)
 	}
 }
