@@ -14,6 +14,13 @@ public protocol SubscriptionStore: Sendable {
 	func getAllSubscriptions() async throws -> [Subscription]
 	func addNewVersion(_ version: String, forSubscription doc: Subscription) async throws
 	func deleteSubscription(_ subscription: Subscription) async throws
+
+	/// Removes one chat from an app's subscription, deleting the document if it was the last.
+	///
+	/// Used to prune a chat Telegram says is gone. Reuses the same path as `/del`, so duplicate
+	/// documents are handled and no subscriber is left behind in one of them.
+	@discardableResult
+	func unsubscribeFromNewVersions(_ bundleID: String, forChatID chatID: Int64) async throws -> Subscription?
 }
 
 extension DBManager: SubscriptionStore {}

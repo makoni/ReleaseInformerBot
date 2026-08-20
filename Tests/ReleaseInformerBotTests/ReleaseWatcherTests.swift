@@ -20,6 +20,7 @@ private actor StubStore: SubscriptionStore {
 
 	private(set) var deleted = [String]()
 	private(set) var recorded = [String]()
+	private(set) var chatsRemoved = [String]()
 
 	private var recordFails: Bool
 
@@ -34,6 +35,22 @@ private actor StubStore: SubscriptionStore {
 	func addNewVersion(_ version: String, forSubscription doc: Subscription) async throws {
 		guard !recordFails else { throw StubError.storeUnavailable }
 		recorded.append("\(doc.bundleID)@\(version)")
+	}
+
+	func unsubscribeFromNewVersions(_ bundleID: String, forChatID chatID: Int64) async throws -> Subscription? {
+		chatsRemoved.append("\(chatID)@\(bundleID)")
+
+		guard let index = subscriptions.firstIndex(where: { $0.bundleID == bundleID }) else { return nil }
+		var subscription = subscriptions[index]
+		guard subscription.chats.contains(chatID) else { return nil }
+
+		subscription.chats.remove(chatID)
+		if subscription.chats.isEmpty {
+			subscriptions.remove(at: index)
+		} else {
+			subscriptions[index] = subscription
+		}
+		return subscription
 	}
 
 	func deleteSubscription(_ subscription: Subscription) async throws {
@@ -349,10 +366,55 @@ struct ReleaseWatcherTests {
 		await sweep(watcher)
 		#expect(await watcher.pendingNotificationCount == 1)
 
-		await watcher.failNextDelivery(with: .permanent(reason: "Forbidden: bot was blocked by the user"))
+		await watcher.failNextDelivery(with: .chatUnreachable(reason: "Forbidden: bot was blocked by the user"))
 		await watcher.deliverNextNotification()
 
 		#expect(await watcher.pendingNotificationCount == 0)
+	}
+
+	/// Nothing else will ever remove a dead chat, so it costs an API call and an error line on
+	/// every release of every app it follows, forever.
+	@Test("An unreachable chat is unsubscribed, not just skipped")
+	func unsubscribesUnreachableChats() async {
+		let store = StubStore([subscription("a.b.c", versions: ["1.0"], chats: [42])])
+		let lookup = StubLookup(fallback: .success([result("a.b.c", version: "2.0")]))
+		let watcher = ReleaseWatcher(dbManager: store, lookup: lookup)
+
+		await sweep(watcher)
+		await watcher.failNextDelivery(with: .chatUnreachable(reason: "Forbidden: bot was blocked by the user"))
+		await watcher.deliverNextNotification()
+
+		#expect(await store.chatsRemoved == ["42@a.b.c"])
+		#expect(await watcher.pendingNotificationCount == 0)
+	}
+
+	/// The chat is alive; it was this message Telegram refused. Unsubscribing here would throw
+	/// away a real subscriber over a formatting problem.
+	@Test("A rejected message does not unsubscribe anyone")
+	func rejectedMessageKeepsTheSubscriber() async {
+		let store = StubStore([subscription("a.b.c", versions: ["1.0"], chats: [42])])
+		let lookup = StubLookup(fallback: .success([result("a.b.c", version: "2.0")]))
+		let watcher = ReleaseWatcher(dbManager: store, lookup: lookup)
+
+		await sweep(watcher)
+		await watcher.failNextDelivery(with: .permanent(reason: "Bad Request: can't parse entities"))
+		await watcher.deliverNextNotification()
+
+		#expect(await store.chatsRemoved.isEmpty)
+		#expect(await watcher.pendingNotificationCount == 0)
+	}
+
+	@Test("A temporary failure does not unsubscribe anyone")
+	func temporaryFailureKeepsTheSubscriber() async {
+		let store = StubStore([subscription("a.b.c", versions: ["1.0"], chats: [42])])
+		let lookup = StubLookup(fallback: .success([result("a.b.c", version: "2.0")]))
+		let watcher = ReleaseWatcher(dbManager: store, lookup: lookup)
+
+		await sweep(watcher)
+		await watcher.failNextDelivery(with: .temporary(reason: "Bad Gateway"))
+		await watcher.deliverNextNotification()
+
+		#expect(await store.chatsRemoved.isEmpty)
 	}
 
 	@Test("A temporary failure is requeued")

@@ -291,7 +291,7 @@ public actor ReleaseWatcher {
 		if let injected = nextDeliveryFailure {
 			nextDeliveryFailure = nil
 			var notification = pendingNotifications.removeFirst()
-			handleDeliveryFailure(injected, for: &notification)
+			await handleDeliveryFailure(injected, for: &notification)
 			return
 		}
 
@@ -308,18 +308,38 @@ public actor ReleaseWatcher {
 			)
 			logger.debug("Notification sent to chat: \(notification.chatID)")
 		} catch {
-			handleDeliveryFailure(error, for: &notification)
+			await handleDeliveryFailure(error, for: &notification)
 		}
 	}
 
-	private func handleDeliveryFailure(_ error: any Error, for notification: inout PendingNotification) {
-		// A chat that has blocked the bot or been deactivated refuses every future message, so
-		// retrying it costs an API call and an error line on every release from here on.
-		if let delivery = error as? TelegramDeliveryError, delivery.isPermanent {
+	private func handleDeliveryFailure(_ error: any Error, for notification: inout PendingNotification) async {
+		let delivery = error as? TelegramDeliveryError
+
+		// Nothing else ever removes a chat Telegram says is gone, so it would keep costing an
+		// API call and an error line on every release of every app it follows.
+		if delivery?.isChatUnreachable == true {
+			logger.error(
+				"""
+				Unsubscribing chat \(notification.chatID) from \(notification.bundleID) — \
+				Telegram will not deliver to it: \(delivery?.reason ?? "")
+				"""
+			)
+
+			do {
+				try await dbManager.unsubscribeFromNewVersions(notification.bundleID, forChatID: notification.chatID)
+			} catch {
+				// Worth another go next time the chat comes up; the notification is dropped
+				// either way, since it cannot be delivered.
+				logger.error("Failed to unsubscribe chat \(notification.chatID) from \(notification.bundleID): \(error)")
+			}
+			return
+		}
+
+		if delivery?.isWorthRetrying == false {
 			logger.error(
 				"""
 				Dropping the \(notification.bundleID) notification for chat \
-				\(notification.chatID) — it will not be accepted: \(delivery.reason)
+				\(notification.chatID) — it will not be accepted: \(delivery?.reason ?? "")
 				"""
 			)
 			return

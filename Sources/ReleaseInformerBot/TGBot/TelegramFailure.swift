@@ -63,22 +63,6 @@ enum TelegramFailure {
 		}
 	}
 
-	/// Whether the caller should try this call again.
-	///
-	/// A chat that has blocked the bot, been deleted or deactivated will refuse every future
-	/// message, and a malformed message will stay malformed — so both are reported as
-	/// permanent. Retrying them costs an API call and an error line per release, forever.
-	static func classify(status: UInt, body: Data) -> TelegramDeliveryError {
-		let reason = describe(status: status, body: body)
-
-		switch status {
-		case 400, 401, 403, 404:
-			return .permanent(reason: reason)
-		default:
-			return .temporary(reason: reason)
-		}
-	}
-
 	/// A log-worthy description of a failed Telegram call.
 	static func describe(status: UInt, body: Data) -> String {
 		var parts = ["Telegram request failed with status \(status)"]
@@ -96,6 +80,30 @@ enum TelegramFailure {
 		}
 
 		return parts.joined(separator: " — ")
+	}
+
+	/// Whether the caller should try again, and whether the chat is worth keeping.
+	///
+	/// A `403` on a send is always about the chat: Telegram uses it for blocked, deactivated,
+	/// kicked and non-member. A `400` is about the request, except for the one description that
+	/// means the chat is gone. Everything else stays retryable, because guessing wrong in that
+	/// direction only costs a retry, while guessing wrong the other way deletes a subscriber.
+	static func classify(status: UInt, body: Data) -> TelegramDeliveryError {
+		let reason = describe(status: status, body: body)
+		let description = decode(body)?.description ?? ""
+
+		switch status {
+		case 403:
+			return .chatUnreachable(reason: reason)
+		case 400 where description.localizedCaseInsensitiveContains("chat not found"):
+			return .chatUnreachable(reason: reason)
+		case 400, 401, 404:
+			// A malformed message stays malformed, and a revoked token fails every send — but
+			// neither says anything about this particular chat.
+			return .permanent(reason: reason)
+		default:
+			return .temporary(reason: reason)
+		}
 	}
 
 	private static func decode(_ body: Data) -> Body? {
