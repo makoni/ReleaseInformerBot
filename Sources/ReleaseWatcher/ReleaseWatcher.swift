@@ -57,6 +57,7 @@ public actor ReleaseWatcher {
 	private var pendingNotifications = [PendingNotification]()
 	private var missingApps = MissingAppTracker(threshold: missingLookupsBeforeDeletion)
 	private var resumeLookupsAt: ContinuousClock.Instant?
+	private var nextDeliveryFailure: TelegramDeliveryError?
 
 	/// Held strongly on purpose: `TGBot` never references the watcher, so there is no cycle
 	/// to break, and a weak reference here would turn the SDK's own retain habits into
@@ -278,8 +279,21 @@ public actor ReleaseWatcher {
 
 	// MARK: - Notifying
 
+	/// Makes the next delivery fail, so the retry-versus-drop decision can be exercised
+	/// without a live Telegram connection.
+	func failNextDelivery(with error: TelegramDeliveryError) {
+		nextDeliveryFailure = error
+	}
+
 	func deliverNextNotification() async {
 		guard !pendingNotifications.isEmpty else { return }
+
+		if let injected = nextDeliveryFailure {
+			nextDeliveryFailure = nil
+			var notification = pendingNotifications.removeFirst()
+			handleDeliveryFailure(injected, for: &notification)
+			return
+		}
 
 		guard let bot = tgBot else {
 			logger.warning("No Telegram bot available; holding \(pendingNotifications.count) notifications.")
@@ -294,28 +308,44 @@ public actor ReleaseWatcher {
 			)
 			logger.debug("Notification sent to chat: \(notification.chatID)")
 		} catch {
-			notification.attempts += 1
+			handleDeliveryFailure(error, for: &notification)
+		}
+	}
 
-			guard notification.attempts < Self.maxNotificationAttempts else {
-				logger.error(
-					"""
-					Giving up on the \(notification.bundleID) notification for chat \
-					\(notification.chatID) after \(notification.attempts) attempts. Error: \(error)
-					"""
-				)
-				return
-			}
-
-			// The version is already recorded, so dropping this would lose the release
-			// announcement for good. Retry behind everything else that is waiting.
+	private func handleDeliveryFailure(_ error: any Error, for notification: inout PendingNotification) {
+		// A chat that has blocked the bot or been deactivated refuses every future message, so
+		// retrying it costs an API call and an error line on every release from here on.
+		if let delivery = error as? TelegramDeliveryError, delivery.isPermanent {
 			logger.error(
 				"""
-				Attempt \(notification.attempts) to notify chat \(notification.chatID) about \
-				\(notification.bundleID) failed; requeueing. Error: \(error)
+				Dropping the \(notification.bundleID) notification for chat \
+				\(notification.chatID) — it will not be accepted: \(delivery.reason)
 				"""
 			)
-			pendingNotifications.append(notification)
+			return
 		}
+
+		notification.attempts += 1
+
+		guard notification.attempts < Self.maxNotificationAttempts else {
+			logger.error(
+				"""
+				Giving up on the \(notification.bundleID) notification for chat \
+				\(notification.chatID) after \(notification.attempts) attempts: \(error)
+				"""
+			)
+			return
+		}
+
+		// The version is already recorded, so dropping this would lose the release announcement
+		// for good. Retry behind everything else that is waiting.
+		logger.error(
+			"""
+			Attempt \(notification.attempts) to notify chat \(notification.chatID) about \
+			\(notification.bundleID) failed; requeueing: \(error)
+			"""
+		)
+		pendingNotifications.append(notification)
 	}
 
 	/// Telegram rejects a message longer than this outright.

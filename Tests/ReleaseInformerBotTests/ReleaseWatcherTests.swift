@@ -336,6 +336,53 @@ struct ReleaseWatcherTests {
 		#expect(await store.deleted.isEmpty)
 	}
 
+	// MARK: - Notification delivery
+
+	/// Delivery success is logged at debug level, so the queue depth is what tells us whether a
+	/// failed send was retried or dropped.
+	@Test("A chat that will never accept a message is dropped, not retried")
+	func dropsPermanentlyUnreachableChats() async {
+		let store = StubStore([subscription("a.b.c", versions: ["1.0"])])
+		let lookup = StubLookup(fallback: .success([result("a.b.c", version: "2.0")]))
+		let watcher = ReleaseWatcher(dbManager: store, lookup: lookup)
+
+		await sweep(watcher)
+		#expect(await watcher.pendingNotificationCount == 1)
+
+		await watcher.failNextDelivery(with: .permanent(reason: "Forbidden: bot was blocked by the user"))
+		await watcher.deliverNextNotification()
+
+		#expect(await watcher.pendingNotificationCount == 0)
+	}
+
+	@Test("A temporary failure is requeued")
+	func requeuesTemporaryFailures() async {
+		let store = StubStore([subscription("a.b.c", versions: ["1.0"])])
+		let lookup = StubLookup(fallback: .success([result("a.b.c", version: "2.0")]))
+		let watcher = ReleaseWatcher(dbManager: store, lookup: lookup)
+
+		await sweep(watcher)
+		await watcher.failNextDelivery(with: .temporary(reason: "Bad Gateway"))
+		await watcher.deliverNextNotification()
+
+		#expect(await watcher.pendingNotificationCount == 1)
+	}
+
+	@Test("A temporary failure is eventually given up on rather than retried forever")
+	func givesUpAfterRepeatedTemporaryFailures() async {
+		let store = StubStore([subscription("a.b.c", versions: ["1.0"])])
+		let lookup = StubLookup(fallback: .success([result("a.b.c", version: "2.0")]))
+		let watcher = ReleaseWatcher(dbManager: store, lookup: lookup)
+
+		await sweep(watcher)
+		for _ in 0..<ReleaseWatcher.maxNotificationAttempts {
+			await watcher.failNextDelivery(with: .temporary(reason: "Bad Gateway"))
+			await watcher.deliverNextNotification()
+		}
+
+		#expect(await watcher.pendingNotificationCount == 0)
+	}
+
 	// MARK: - Pacing
 
 	@Test("The batch interval keeps request volume inside Apple's documented limit")

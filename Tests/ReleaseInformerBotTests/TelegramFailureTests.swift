@@ -86,4 +86,58 @@ struct TelegramFailureTests {
 		#expect(TelegramFailure.backoff(status: 400, body: Data()) == nil)
 		#expect(TelegramFailure.backoff(status: 404, body: Data()) == nil)
 	}
+
+	/// Observed in production: pacing a per-chat 403 stalled the serialized delivery queue for
+	/// 30 seconds per blocked chat, which delayed every healthy chat queued behind it.
+	@Test("A chat rejecting a message is not paced")
+	func doesNotPaceRejectedChats() {
+		let blocked = Data(#"{"ok":false,"error_code":403,"description":"Forbidden: bot was blocked by the user"}"#.utf8)
+		#expect(TelegramFailure.backoff(status: 403, body: blocked) == nil)
+	}
+
+	@Test("A revoked token is still paced, since the SDK keeps polling regardless")
+	func stillPacesTokenFailures() {
+		#expect(TelegramFailure.backoff(status: 401, body: Data()) != nil)
+	}
+}
+
+/// Retrying a chat that will never accept a message costs an API call and an error line on
+/// every release, forever — and the retry loop had no way to tell that case apart.
+@Suite("Telegram failure classification")
+struct TelegramClassificationTests {
+	private func body(_ code: Int, _ description: String) -> Data {
+		Data(#"{"ok":false,"error_code":\#(code),"description":"\#(description)"}"#.utf8)
+	}
+
+	@Test("A chat that will never accept a message is permanent", arguments: [
+		(403, "Forbidden: bot was blocked by the user"),
+		(403, "Forbidden: user is deactivated"),
+		(403, "Forbidden: bot was kicked from the group chat"),
+		(400, "Bad Request: chat not found")
+	])
+	func classifiesUnreachableChats(status: Int, description: String) {
+		let failure = TelegramFailure.classify(status: UInt(status), body: body(status, description))
+		#expect(failure.isPermanent)
+		#expect(failure.reason.contains(description))
+	}
+
+	@Test("A rejected message is permanent too, since it will not parse next time either")
+	func classifiesRejectedMessages() {
+		let failure = TelegramFailure.classify(status: 400, body: body(400, "Bad Request: can't parse entities"))
+		#expect(failure.isPermanent)
+	}
+
+	@Test("Server-side trouble is temporary", arguments: [429, 500, 502, 503])
+	func classifiesTransientFailures(status: Int) {
+		#expect(!TelegramFailure.classify(status: UInt(status), body: Data()).isPermanent)
+	}
+
+	/// `BotError` interpolated as "<No description provided>", which is how the retry log ended
+	/// up telling us nothing about why a send failed.
+	@Test("The error says what went wrong when interpolated")
+	func describesItself() {
+		let failure = TelegramFailure.classify(status: 403, body: body(403, "Forbidden: user is deactivated"))
+		#expect("\(failure)".contains("user is deactivated"))
+		#expect(!"\(failure)".contains("No description provided"))
+	}
 }

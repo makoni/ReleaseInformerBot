@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import Shared
 
 /// Reads Telegram's error payload.
 ///
@@ -41,8 +42,9 @@ enum TelegramFailure {
 
 	/// How long to wait before letting a failure propagate.
 	///
-	/// `nil` for failures that will not pass on their own — retrying those slowly is no better
-	/// than retrying them quickly, and the caller should surface them immediately.
+	/// `nil` for anything the caller should see at once. In particular a `403` is *not* paced:
+	/// it is how Telegram reports that one chat has blocked the bot or been deactivated, and
+	/// the delivery queue is serialized — so pausing on it delays every healthy chat behind it.
 	static func backoff(status: UInt, body: Data) -> Duration? {
 		if let retryAfter = retryAfter(in: body), retryAfter > 0 {
 			return min(.seconds(retryAfter), maximumBackoff)
@@ -52,12 +54,28 @@ enum TelegramFailure {
 		case 429, 500..<600:
 			// No hint given, but these do pass; a few seconds is enough to stop a hot loop.
 			return .seconds(5)
-		case 401, 403:
-			// A revoked or wrong token stays revoked. Still worth pacing, because the SDK
-			// will re-poll regardless and would otherwise spin.
+		case 401:
+			// A revoked token stays revoked, but the SDK's long-polling loop re-polls
+			// regardless, so this is the only place that can keep it from spinning.
 			return .seconds(30)
 		default:
 			return nil
+		}
+	}
+
+	/// Whether the caller should try this call again.
+	///
+	/// A chat that has blocked the bot, been deleted or deactivated will refuse every future
+	/// message, and a malformed message will stay malformed — so both are reported as
+	/// permanent. Retrying them costs an API call and an error line per release, forever.
+	static func classify(status: UInt, body: Data) -> TelegramDeliveryError {
+		let reason = describe(status: status, body: body)
+
+		switch status {
+		case 400, 401, 403, 404:
+			return .permanent(reason: reason)
+		default:
+			return .temporary(reason: reason)
 		}
 	}
 

@@ -8,6 +8,7 @@
 import Foundation
 import Vapor
 import SwiftTelegramBot
+import Shared
 import Logging
 import AsyncHTTPClient
 
@@ -39,18 +40,20 @@ public final class AsyncHttpTGClient: TGClientPrtcl, @unchecked Sendable {
 
 		guard clientResponse.status == .ok else {
 			let body = Data(buffer.readableBytesView)
-			let reason = TelegramFailure.describe(status: clientResponse.status.code, body: body)
-			log.error("\(reason)")
+			let failure = TelegramFailure.classify(status: clientResponse.status.code, body: body)
+			log.error("\(failure.reason)")
 
 			// The SDK's long-polling loop catches whatever we throw and immediately re-polls
 			// with no delay, so a persistent 401 or a 429 would otherwise become an
-			// unthrottled request loop writing two error lines per iteration. Waiting here is
-			// the only place in this path that can apply back-pressure.
+			// unthrottled request loop. Waiting here is the only place in this path that can
+			// apply back-pressure — but only for failures that pacing actually helps.
 			if let delay = TelegramFailure.backoff(status: clientResponse.status.code, body: body) {
 				try? await Task.sleep(for: delay)
 			}
 
-			throw BotError(type: .network, reason: reason)
+			// Thrown instead of `BotError` so callers can tell "try again" from "never again";
+			// the SDK only logs handler errors, so the concrete type is ours to choose.
+			throw failure
 		}
 
 		let telegramContainer: TGTelegramContainer<Response> = try JSONDecoder().decode(TGTelegramContainer<Response>.self, from: buffer)
