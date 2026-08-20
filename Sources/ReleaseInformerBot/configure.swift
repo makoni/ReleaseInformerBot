@@ -74,10 +74,9 @@ public func configure(_ app: Application) async throws {
 	// defaults — a different database than the operator meant — and that looks exactly like
 	// every user having no subscriptions. Never log the password.
 	logger.info(
-		"""
-		Using CouchDB at \(couchConfig.couchProtocol.rawValue)://\(couchConfig.host):\(couchConfig.port) 		as \(couchConfig.user)
-		"""
+		"Using CouchDB at \(couchConfig.couchProtocol.rawValue)://\(couchConfig.host):\(couchConfig.port) as \(couchConfig.user)"
 	)
+
 	if couchConfig.password.isEmpty {
 		logger.critical(
 			"CouchDB password is empty. Set couch.password or COUCHDB_PASS unless this server runs in admin party mode."

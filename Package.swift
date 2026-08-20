@@ -12,6 +12,7 @@ let package = Package(
         // 🔵 Non-blocking, event-driven networking for Swift. Used for custom executors
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
         .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.19.0"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
         .package(url: "https://github.com/nerzh/swift-telegram-sdk.git", .upToNextMajor(from: "10.0.0")),
         .package(url: "https://github.com/makoni/couchdb-swift.git", from: "3.0.0"),
         .package(url: "https://github.com/apple/swift-configuration", from: "1.0.0"),
@@ -23,12 +24,14 @@ let package = Package(
                 .product(name: "CouchDBClient", package: "couchdb-swift"),
                 .product(name: "AsyncHTTPClient", package: "async-http-client"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
+                .product(name: "Logging", package: "swift-log"),
             ]
         ),
         .target(
             name: "ReleaseWatcher",
             dependencies: [
                 .product(name: "SwiftTelegramBot", package: "swift-telegram-sdk"),
+                .product(name: "Logging", package: "swift-log"),
                 .target(name: "Shared")
             ]
         ),

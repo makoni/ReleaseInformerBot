@@ -64,7 +64,6 @@ struct LenientRowsResponseTests {
 		let response = try decode(json)
 
 		#expect(response.values.map(\.bundleID) == ["a.b.c", "d.e.f"])
-		#expect(response.totalRows == 2)
 		#expect(response.skippedRowIDs.isEmpty)
 	}
 
@@ -102,8 +101,8 @@ struct LenientRowsResponseTests {
 		}
 	}
 
-	@Test("A view response with no total_rows still decodes")
-	func toleratesMissingTotalRows() throws {
+	@Test("A view response carrying only rows still decodes")
+	func toleratesMinimalResponse() throws {
 		let response = try decode("{\"rows\":[\(row(bundleID: "a.b.c"))]}")
 		#expect(response.values.count == 1)
 	}
@@ -348,6 +347,28 @@ struct DeleteFailureMappingTests {
 	func notFoundIsPreserved() throws {
 		let error = CouchDBClientError.deleteError(error: try couchError("not_found"))
 		#expect(CouchDBDocumentStore.storeError(fromDeleteFailure: error) == .notFound)
+	}
+
+	/// The library returns `CouchUpdateResponse(ok: false, ...)` for an empty body instead of
+	/// throwing, so discarding the result would read a failed delete as a success.
+	@Test("A delete that did not report success is an error")
+	func unsuccessfulDeleteIsAnError() throws {
+		let refused = try JSONDecoder().decode(
+			CouchUpdateResponse.self,
+			from: Data(#"{"ok":false,"id":"","rev":""}"#.utf8)
+		)
+		#expect(throws: StoreError.unexpectedResponse) {
+			try CouchDBDocumentStore.verify(refused)
+		}
+	}
+
+	@Test("A successful delete passes")
+	func successfulDeletePasses() throws {
+		let accepted = try JSONDecoder().decode(
+			CouchUpdateResponse.self,
+			from: Data(#"{"ok":true,"id":"a.b.c","rev":"2-x"}"#.utf8)
+		)
+		#expect(throws: Never.self) { try CouchDBDocumentStore.verify(accepted) }
 	}
 
 	@Test("An unrecognised failure is not silently retried forever")

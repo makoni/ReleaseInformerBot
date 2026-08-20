@@ -51,7 +51,7 @@ enum SubscriptionPlanner {
 			// that cannot safely be an id falls back to a generated one — it loses the
 			// uniqueness guarantee, but it cannot address the wrong endpoint.
 			let subscription = Subscription(
-				_id: isUsableAsDocumentID(result.bundleID) ? result.bundleID : NSUUID().uuidString,
+				_id: isUsableAsDocumentID(result.bundleID) ? result.bundleID : UUID().uuidString,
 				bundleID: result.bundleID,
 				url: result.url,
 				title: result.title,

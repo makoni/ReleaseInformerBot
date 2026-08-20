@@ -21,14 +21,18 @@ private actor StubStore: SubscriptionStore {
 	private(set) var deleted = [String]()
 	private(set) var recorded = [String]()
 
-	init(_ subscriptions: [Subscription], deleteFails: Bool = false) {
+	private var recordFails: Bool
+
+	init(_ subscriptions: [Subscription], deleteFails: Bool = false, recordFails: Bool = false) {
 		self.subscriptions = subscriptions
 		self.deleteFails = deleteFails
+		self.recordFails = recordFails
 	}
 
 	func getAllSubscriptions() async throws -> [Subscription] { subscriptions }
 
 	func addNewVersion(_ version: String, forSubscription doc: Subscription) async throws {
+		guard !recordFails else { throw StubError.storeUnavailable }
 		recorded.append("\(doc.bundleID)@\(version)")
 	}
 
@@ -209,6 +213,33 @@ struct ReleaseWatcherTests {
 		// silently restarting the countdown.
 		await sweep(watcher)
 		#expect(await store.deleted.isEmpty)
+	}
+
+	/// Recording the version is what stops a release being announced twice. If the write fails
+	/// and the announcement goes out anyway, the next sweep sees the same "new" version and
+	/// announces it again — every five minutes, forever.
+	@Test("A release whose version could not be recorded is not announced")
+	func doesNotAnnounceWhatItCouldNotRecord() async {
+		let store = StubStore([subscription("a.b.c", versions: ["1.0"])], recordFails: true)
+		let lookup = StubLookup(fallback: .success([result("a.b.c", version: "2.0")]))
+		let watcher = ReleaseWatcher(dbManager: store, lookup: lookup)
+
+		await sweep(watcher)
+
+		#expect(await store.recorded.isEmpty)
+		#expect(await watcher.pendingNotificationCount == 0)
+	}
+
+	@Test("A release that was recorded is queued for delivery")
+	func announcesWhatItRecorded() async {
+		let store = StubStore([subscription("a.b.c", versions: ["1.0"], chats: [1, 2])])
+		let lookup = StubLookup(fallback: .success([result("a.b.c", version: "2.0")]))
+		let watcher = ReleaseWatcher(dbManager: store, lookup: lookup)
+
+		await sweep(watcher)
+
+		#expect(await store.recorded == ["a.b.c@2.0"])
+		#expect(await watcher.pendingNotificationCount == 2)
 	}
 
 	// MARK: - Normal operation

@@ -66,11 +66,15 @@ public struct CouchDBDocumentStore: CouchDocumentStore {
 	public static func viewURI(_ view: String) -> String { "_design/list/_view/\(view)" }
 
 	public func ensureSchema() async throws {
-		if try await client.dbExists(db) {
-			logger.info("Database \(db) exists.")
-		} else {
-			try await client.createDB(db)
-			logger.info("Database \(db) created.")
+		do {
+			if try await client.dbExists(db) {
+				logger.info("Database \(db) exists.")
+			} else {
+				try await client.createDB(db)
+				logger.info("Database \(db) created.")
+			}
+		} catch let error as CouchDBClientError {
+			throw StoreError(error)
 		}
 
 		let designDocID = "_design/list"
@@ -100,7 +104,11 @@ public struct CouchDBDocumentStore: CouchDocumentStore {
 			return
 		}
 
-		_ = try await client.insert(dbName: db, doc: designDoc)
+		do {
+			_ = try await client.insert(dbName: db, doc: designDoc)
+		} catch let error as CouchDBClientError {
+			throw StoreError(error)
+		}
 		logger.info("Design document created with by_bundle and by_chat views.")
 	}
 
@@ -146,6 +154,12 @@ public struct CouchDBDocumentStore: CouchDocumentStore {
 	/// retry loop cannot see a delete conflict at all — and delete is the write where it is
 	/// most needed, since consolidating duplicates removes documents another task may hold.
 	///
+	/// The library intercepts only 401 and 404 before that decode and then discards the status,
+	/// so a 400, 412 or 5xx on DELETE also arrives as a `DecodingError` and is reported here as
+	/// a conflict. That is imprecise but safe: such a delete is retried three times and then
+	/// surfaced, so nothing spins and nothing is lost — a CouchDB outage during consolidation
+	/// is simply logged as a conflict. Distinguishing them would mean bypassing `client.delete`.
+	///
 	/// A free function so the translation is testable; the call itself needs a live server.
 	static func storeError(fromDeleteFailure error: any Error) -> StoreError {
 		switch error {
@@ -168,8 +182,12 @@ public struct CouchDBDocumentStore: CouchDocumentStore {
 			throw Self.storeError(fromDeleteFailure: error)
 		}
 
-		// An empty body yields `CouchUpdateResponse(ok: false, ...)` rather than a throw, so
-		// discarding the result would read a failed delete as a success.
+		try Self.verify(response)
+	}
+
+	/// An empty response body yields `CouchUpdateResponse(ok: false, id: "", rev: "")` rather
+	/// than a throw, so discarding the result would read a failed delete as a success.
+	static func verify(_ response: CouchUpdateResponse) throws {
 		guard response.ok else {
 			throw StoreError.unexpectedResponse
 		}

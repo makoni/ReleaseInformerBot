@@ -45,7 +45,6 @@ struct LenientRowsResponse<Value: Decodable>: Decodable {
 		}
 	}
 
-	let totalRows: Int
 	let rows: [Row]
 
 	var values: [Value] { rows.compactMap(\.value) }
@@ -55,7 +54,6 @@ struct LenientRowsResponse<Value: Decodable>: Decodable {
 	var skippedRowIDs: [String] { rows.filter { $0.value == nil }.map { $0.id ?? "<no id>" } }
 
 	private enum CodingKeys: String, CodingKey {
-		case totalRows = "total_rows"
 		case rows
 	}
 
@@ -64,6 +62,5 @@ struct LenientRowsResponse<Value: Decodable>: Decodable {
 		// `rows` is required: a CouchDB error body has none, and mistaking that for an empty
 		// view would look like "every app is gone".
 		rows = try container.decode([Row].self, forKey: .rows)
-		totalRows = try container.decodeIfPresent(Int.self, forKey: .totalRows) ?? rows.count
 	}
 }

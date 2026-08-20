@@ -24,7 +24,6 @@ private actor StubCouchStore: CouchDocumentStore {
 	private(set) var viewReads = 0
 	private(set) var insertAttempts = 0
 	private(set) var deleteAttempts = 0
-	private(set) var queriesSeen = [[URLQueryItem]]()
 
 	init(_ documents: [Subscription] = []) {
 		for document in documents {
@@ -83,8 +82,6 @@ private actor StubCouchStore: CouchDocumentStore {
 			return (forcedStatus, Data(#"{"error":"internal_server_error","reason":"boom"}"#.utf8))
 		}
 
-		queriesSeen.append(queryItems ?? [])
-
 		// A view URI that is not one of the two design-document views is a 404, so a renamed
 		// view or a typo cannot pass unnoticed.
 		guard uri == CouchDBDocumentStore.viewURI(CouchDBDocumentStore.byBundleView)
@@ -101,7 +98,7 @@ private actor StubCouchStore: CouchDocumentStore {
 		var rows = documents.values.flatMap { document in
 			viewKeys(for: document, uri: uri).map { (key: $0, id: document._id, document: document) }
 		}
-		var brokenRows = unreadable.map { (key: $0.value, id: $0.key) }
+		let brokenRows = unreadable.map { (key: $0.value, id: $0.key) }
 
 		// CouchDB requires keys as JSON literals and answers 400 otherwise; accepting a bare
 		// string here would bless a request that fails in production.
@@ -138,7 +135,6 @@ private actor StubCouchStore: CouchDocumentStore {
 			rows.map { (key: $0.key, id: $0.id, document: Optional($0.document)) }
 			+ brokenRows.map { (key: $0.key, id: $0.id, document: nil) }
 		merged.sort { ($0.key, $0.id) < ($1.key, $1.id) }
-		brokenRows = []
 
 		if let limit = items["limit"].flatMap(Int.init) {
 			merged = Array(merged.prefix(limit))

@@ -128,6 +128,10 @@ public actor ReleaseWatcher {
 	/// a dropped one.
 	var pendingBatchCount: Int { pendingBatches.count }
 
+	/// Notifications queued for delivery, so tests can tell an announcement that was made from
+	/// one that was correctly withheld.
+	var pendingNotificationCount: Int { pendingNotifications.count }
+
 	// MARK: - Sweeping
 
 	func refillQueueIfDrained() async {
