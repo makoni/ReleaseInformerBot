@@ -36,222 +36,236 @@ public struct CouchConfig: Sendable {
 	}
 }
 
-fileprivate func makeClient(for config: CouchConfig) -> CouchDBClient {
-	CouchDBClient(
-		config: .init(
-			couchProtocol: config.couchProtocol,
-			couchHost: config.host,
-			couchPort: config.port,
-			userName: config.user,
-			userPassword: config.password,
-			requestsTimeout: config.timeout
-		)
-	)
-}
-
 public extension CouchConfig {
 	static func makeProtocol(_ value: String) -> CouchDBClient.CouchDBProtocol {
 		CouchDBClient.CouchDBProtocol(rawValue: value.lowercased()) ?? .http
 	}
 }
 
-// Codable struct for CouchDB design document
-fileprivate struct DesignDocument: CouchDBRepresentable {
-	let _id: String
-	let language: String
-	let views: [String: [String: String]]
-	// Optionally add _rev if you want to support updates
-	var _rev: String?
-
-	func updateRevision(_ newRevision: String) -> DesignDocument {
-		return DesignDocument(_id: _id, language: language, views: views, _rev: newRevision)
-	}
-}
-
 public actor DBManager {
-	private let db = "release_bot"
-	private let couchDBClient: CouchDBClient
+	private static let dbName = "release_bot"
+
+	private let store: any CouchDocumentStore
 
 	public init(couchConfig: CouchConfig = CouchConfig()) {
-		self.couchDBClient = makeClient(for: couchConfig)
+		self.store = CouchDBDocumentStore(db: Self.dbName, config: couchConfig)
+	}
+
+	/// Used by tests to drive the read-modify-write logic without a database.
+	init(store: any CouchDocumentStore) {
+		self.store = store
 	}
 
 	/// Sets up the CouchDB database and required design documents.
 	public func setupIfNeed() async throws {
-		// 1. Check if DB exists using dbExists
-		let dbExists = try await couchDBClient.dbExists(db)
-		if !dbExists {
-			try await couchDBClient.createDB(db)
-			logger.info("Database \(db) created.")
-		} else {
-			logger.info("Database \(db) exists.")
-		}
-
-		// 3. Check and create design document for by_bundle and by_chat
-		let designDocID = "_design/list"
-		let byBundleViewMap = "function(doc) { emit(doc.bundle_id, doc); }"
-		let byChatViewMap = "function(doc) { for (var i=0; i<doc.chats.length; i++) { emit(doc.chats[i], doc); } }"
-		let designDoc = DesignDocument(
-			_id: designDocID,
-			language: "javascript",
-			views: [
-				"by_bundle": ["map": byBundleViewMap],
-				"by_chat": ["map": byChatViewMap]
-			]
-		)
-
-		var needsCreate = false
-		do {
-			let _: DesignDocument = try await couchDBClient.get(fromDB: db, uri: designDocID)
-		} catch let error as CouchDBClientError {
-			switch error {
-			case .notFound:
-				needsCreate = true
-			default:
-				logger.error("Unexpected error while checking design document: \(error.localizedDescription)")
-				throw error
-			}
-		} catch {
-			throw error
-		}
-
-		if needsCreate {
-			_ = try await couchDBClient.insert(dbName: db, doc: designDoc)
-			logger.info("Design document created with by_bundle and by_chat views.")
-		} else {
-			logger.info("Design document already exists.")
-		}
+		try await store.ensureSchema()
 	}
 
-	public func subscribeForNewVersions(_ result: SearchResult, forChatID chatID: Int64) async throws {
-		// Update existing subscription
-		if var subscription = try await self.searchByBundleID(result.bundleID) {
-			if !subscription.chats.contains(chatID) {
-				subscription.chats.insert(chatID)
-				_ = try await couchDBClient.update(dbName: db, doc: subscription)
-			}
-			return
+	// MARK: - Reading
+
+	/// Rows fetched per view request.
+	///
+	/// Sized against the 10 MB `couchdb-swift` will collect, not against anything larger: the
+	/// views emit whole documents, and a single popular app's document carries every
+	/// subscriber's chat ID, so a page of 500 could exceed that on its own. An unpaged read
+	/// eventually fails outright, and then the watcher stops checking *everything*.
+	static let viewPageSize = 100
+
+	private static let byBundleURI = CouchDBDocumentStore.viewURI(CouchDBDocumentStore.byBundleView)
+	private static let byChatURI = CouchDBDocumentStore.viewURI(CouchDBDocumentStore.byChatView)
+
+	private func view(
+		uri: String,
+		queryItems: [URLQueryItem]? = nil
+	) async throws -> LenientRowsResponse<Subscription> {
+		let (statusCode, body) = try await store.fetchView(uri: uri, queryItems: queryItems)
+
+		try CouchStatus.validate(statusCode: statusCode)
+
+		let decoded = try JSONDecoder().decode(LenientRowsResponse<Subscription>.self, from: body)
+
+		if !decoded.skippedRowIDs.isEmpty {
+			logger.error(
+				"Skipped unreadable subscription document(s) from \(uri): \(decoded.skippedRowIDs.joined(separator: ", "))"
+			)
 		}
 
-		// Add a new subscription
-		let subscription = Subscription(
-			bundleID: result.bundleID,
-			url: result.url,
-			title: result.title,
-			version: [result.version],
-			chats: [chatID]
-		)
-		_ = try await couchDBClient.insert(dbName: db, doc: subscription)
-		logger.info("Subscription for \(result.bundleID) has been added to the database.")
+		return decoded
 	}
 
-	public func unsubscribeFromNewVersions(_ bundleID: String, forChatID chatID: Int64) async throws -> Subscription? {
-		guard var subscription = try await self.searchByBundleID(bundleID) else { return nil }
-
-		if subscription.chats.contains(chatID) {
-			subscription.chats.remove(chatID)
-
-			if !subscription.chats.isEmpty {
-				subscription = try await couchDBClient.update(dbName: db, doc: subscription)
-			} else {
-				try await deleteSubscription(subscription)
-			}
-		}
-
-		return subscription
-	}
-
-	public func deleteSubscription(_ subscription: Subscription) async throws {
-		_ = try await couchDBClient.delete(fromDb: db, doc: subscription)
-		logger.info("Subscription for \(subscription.bundleID) has been deleted from the database.")
-	}
-
-	private func searchByBundleID(_ bundleID: String) async throws -> Subscription? {
-		let response = try await couchDBClient.get(
-			fromDB: db,
-			uri: "_design/list/_view/by_bundle",
-			queryItems: [
-				URLQueryItem(name: "key", value: "\"\(bundleID)\"")
-			]
-		)
-
-		let expectedBytes =
-			response.headers
-			.first(name: "content-length")
-			.flatMap(Int.init) ?? 1024 * 1024 * 10
-		let bytes = try await response.body.collect(upTo: expectedBytes)
-
-		let data = Data(bytes.readableBytesView)
-
-		let decoder = JSONDecoder()
-		let subscriptions = try decoder.decode(
-			RowsResponse<Subscription>.self,
-			from: data
-		).rows.map({ $0.value })
-
-		return subscriptions.first
+	/// Every document stored for a bundle ID.
+	///
+	/// Plural on purpose: the database does not enforce one document per app, and taking only
+	/// the first is how a duplicate's subscribers became unreachable.
+	private func subscriptions(forBundleID bundleID: String) async throws -> [Subscription] {
+		try await view(uri: Self.byBundleURI, queryItems: ViewQuery.rows(matching: .string(bundleID))).values
 	}
 
 	public func search(byChatID chatID: Int64) async throws -> [Subscription] {
-		let response = try await couchDBClient.get(
-			fromDB: db,
-			uri: "_design/list/_view/by_chat",
-			queryItems: [
-				URLQueryItem(name: "key", value: "\(chatID)")
-			]
-		)
+		try await view(uri: Self.byChatURI, queryItems: ViewQuery.rows(matching: .number(chatID))).values
+	}
 
-		let expectedBytes =
-			response.headers
-			.first(name: "content-length")
-			.flatMap(Int.init) ?? 1024 * 1024 * 10
-		let bytes = try await response.body.collect(upTo: expectedBytes)
+	// MARK: - Writing
 
-		let data = Data(bytes.readableBytesView)
+	/// Whether `/add` actually changed anything.
+	public enum SubscribeOutcome: Sendable, Equatable {
+		case subscribed
+		case alreadySubscribed
+	}
 
-		let decoder = JSONDecoder()
-		let subscriptions = try decoder.decode(
-			RowsResponse<Subscription>.self,
-			from: data
-		).rows.map({ $0.value })
+	@discardableResult
+	public func subscribeForNewVersions(
+		_ result: SearchResult,
+		forChatID chatID: Int64
+	) async throws -> SubscribeOutcome {
+		var outcome = SubscribeOutcome.subscribed
 
-		return subscriptions
+		try await resolvingConflicts {
+			let existing = try await self.subscriptions(forBundleID: result.bundleID)
+			let plan = SubscriptionPlanner.subscribe(result, chatID: chatID, existing: existing)
+
+			outcome = plan.alreadySubscribed ? .alreadySubscribed : .subscribed
+
+			// The keeper is written before the duplicates go, so an interruption can only
+			// leave extra documents behind — never lose a subscriber.
+			if let update = plan.update {
+				_ = try await self.store.update(update)
+			}
+
+			if let insert = plan.insert {
+				_ = try await self.store.insert(insert)
+				logger.info("Subscription for \(insert.bundleID) has been added to the database.")
+			}
+
+			for duplicate in plan.deletions {
+				try await self.store.delete(duplicate)
+				logger.info("Consolidated a duplicate subscription document for \(duplicate.bundleID).")
+			}
+		}
+
+		return outcome
+	}
+
+	public func unsubscribeFromNewVersions(_ bundleID: String, forChatID chatID: Int64) async throws -> Subscription? {
+		var removedFrom: Subscription?
+
+		try await resolvingConflicts {
+			let existing = try await self.subscriptions(forBundleID: bundleID)
+			let plan = SubscriptionPlanner.unsubscribe(chatID: chatID, from: existing)
+
+			// Kept from the first attempt that saw the chat: a retry after a partial write may
+			// legitimately find nothing left to remove, and reporting that as "not found"
+			// would deny a `/del` that already took effect.
+			if removedFrom == nil {
+				removedFrom = plan.removedFrom
+			}
+
+			for document in plan.updates {
+				_ = try await self.store.update(document)
+			}
+
+			for document in plan.deletions {
+				try await self.store.delete(document)
+			}
+		}
+
+		return removedFrom
+	}
+
+	public func deleteSubscription(_ subscription: Subscription) async throws {
+		try await store.delete(subscription)
+		logger.info("Subscription for \(subscription.bundleID) has been deleted from the database.")
+	}
+
+	/// Re-runs `work` when the store reports that someone else wrote first.
+	///
+	/// `DBManager` is an actor, but a read-modify-write suspends at every `await`, so two
+	/// `/add` commands for one app can both see no existing document. Keying documents by
+	/// bundle ID turns that into a conflict for the loser; re-reading then finds the winner's
+	/// document and merges into it, rather than quietly creating a second one.
+	private func resolvingConflicts(
+		attempts: Int = 3,
+		_ work: () async throws -> Void
+	) async throws {
+		// The final attempt sits outside the loop so its failure is rethrown structurally,
+		// rather than depending on a `where` clause to fall through.
+		for attempt in 1..<max(1, attempts) {
+			do {
+				return try await work()
+			} catch StoreError.conflict {
+				logger.info("Document conflict on attempt \(attempt) of \(attempts); re-reading.")
+			}
+		}
+
+		try await work()
 	}
 }
 
 // MARK: - Watcher methods
 extension DBManager {
 	public func getAllSubscriptions() async throws -> [Subscription] {
-		let response = try await couchDBClient.get(
-			fromDB: db,
-			uri: "_design/list/_view/by_bundle"
-		)
+		var all = [Subscription]()
+		var cursor: ViewCursor?
 
-		let expectedBytes =
-			response.headers
-			.first(name: "content-length")
-			.flatMap(Int.init) ?? 1024 * 1024 * 10
-		let bytes = try await response.body.collect(upTo: expectedBytes)
+		while true {
+			let response = try await view(
+				uri: Self.byBundleURI,
+				queryItems: ViewQuery.page(size: Self.viewPageSize, after: cursor)
+			)
 
-		let data = Data(bytes.readableBytesView)
+			all += response.rows.prefix(Self.viewPageSize).compactMap(\.value)
 
-		let decoder = JSONDecoder()
-		let decoded = try decoder.decode(
-			RowsResponse<Subscription>.self,
-			from: data
-		)
+			guard response.rows.count > Self.viewPageSize else { break }
 
-		return decoded.rows.map({ $0.value })
-	}
+			guard let next = response.rows.last?.cursor else {
+				// A row whose key or id could not be read cannot be resumed from. Stopping
+				// here is a partial sweep, so say so rather than looking like a clean finish.
+				logger.error("Stopped paging \(Self.byBundleURI) early: the next page's cursor is unreadable.")
+				break
+			}
 
-	public func addNewVersion(_ version: String, forSubscription doc: Subscription) async throws {
-		var subscription = doc
-		subscription.version.append(version)
-		while subscription.version.count > 5 {
-			subscription.version.removeFirst()
+			// Without this a key that fails to round-trip — or a lost `startkey_docid` —
+			// re-reads the same page forever, and the watcher spins instead of sweeping.
+			guard next != cursor else {
+				logger.error("Stopped paging \(Self.byBundleURI) early: the cursor stopped advancing at \(next.documentID).")
+				break
+			}
+
+			cursor = next
 		}
 
-		_ = try await couchDBClient.update(dbName: db, doc: subscription)
-		logger.info("New version \(version) has been added to subscription \(subscription.bundleID).")
+		return all
+	}
+
+	/// Appends a version to a subscription's history.
+	///
+	/// Re-reads inside the retry rather than trusting the document passed in: the watcher hands
+	/// over a `Subscription` loaded when the sweep started, which may be many batches old, and
+	/// a `/add` landing in between bumps its `_rev`. This is the most frequent write in the
+	/// system, so losing it to a conflict costs an announcement every time it happens.
+	public func addNewVersion(_ version: String, forSubscription doc: Subscription) async throws {
+		try await resolvingConflicts {
+			let existing = try await self.subscriptions(forBundleID: doc.bundleID)
+
+			guard var subscription = existing.first(where: { $0._id == doc._id }) ?? existing.first else {
+				throw StoreError.notFound
+			}
+
+			// Another task may have recorded it while this one waited.
+			guard !subscription.version.contains(version) else {
+				logger.info("Version \(version) already recorded for \(subscription.bundleID).")
+				return
+			}
+
+			subscription.title = doc.title
+			subscription.url = doc.url
+			subscription.version.append(version)
+			while subscription.version.count > 5 {
+				subscription.version.removeFirst()
+			}
+
+			_ = try await self.store.update(subscription)
+			logger.info("New version \(version) has been added to subscription \(subscription.bundleID).")
+		}
 	}
 }

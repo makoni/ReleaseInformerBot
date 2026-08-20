@@ -55,6 +55,44 @@ struct BotHandlersFormattingTests {
 		#expect(BotHandlers.makeListMessage([]) == "You are not subscribed to updates for any apps.")
 	}
 
+	/// Telegram rejects a whole message when `parseMode: .html` meets stray markup. In a live
+	/// 100-app lookup, 2 titles and 16 sets of release notes contained `&`, `<` or `>`, so this
+	/// is routine input, not an edge case.
+	@Test("makeSearchResultsMessage: escapes markup in App Store text")
+	func searchResultsEscapeMarkup() throws {
+		let json = """
+		{
+		  "trackCensoredName": "Barnes & Noble <Reader>",
+		  "bundleId": "com.bn.reader",
+		  "trackViewUrl": "https://example.com/?a=1&b=2",
+		  "version": "1.0"
+		}
+		"""
+		let result = try JSONDecoder().decode(SearchResult.self, from: Data(json.utf8))
+		let message = BotHandlers.makeSearchResultsMessage([result])
+
+		#expect(message.contains("Barnes &amp; Noble &lt;Reader&gt;"))
+		#expect(message.contains("https://example.com/?a=1&amp;b=2"))
+		#expect(!message.contains("Noble <Reader>"))
+		// The bot's own markup must survive.
+		#expect(message.contains("<b>Barnes"))
+	}
+
+	@Test("makeListMessage: escapes markup in App Store text")
+	func listEscapesMarkup() throws {
+		let subscription = try makeSubscription(
+			title: "Tom & Jerry <HD>",
+			bundleID: "com.tj.hd",
+			url: "https://example.com/?x=1&y=2",
+			versions: ["1.0"]
+		)
+		let message = BotHandlers.makeListMessage([subscription])
+
+		#expect(message.contains("Tom &amp; Jerry &lt;HD&gt;"))
+		#expect(message.contains("https://example.com/?x=1&amp;y=2"))
+		#expect(!message.contains("Jerry <HD>"))
+	}
+
 	@Test("makeListMessage: shows last version or N/A")
 	func listShowsLastVersion() throws {
 		let s1 = try makeSubscription(title: "MyApp", bundleID: "com.my.app", url: "https://example.com", versions: ["1.0", "1.1"])

@@ -69,6 +69,20 @@ public func configure(_ app: Application) async throws {
 	}
 
 	let couchConfig = makeCouchConfig(using: config)
+
+	// Without this a typo'd config path starts a bot that quietly talks to the built-in
+	// defaults — a different database than the operator meant — and that looks exactly like
+	// every user having no subscriptions. Never log the password.
+	logger.info(
+		"Using CouchDB at \(couchConfig.couchProtocol.rawValue)://\(couchConfig.host):\(couchConfig.port) as \(couchConfig.user)"
+	)
+
+	if couchConfig.password.isEmpty {
+		logger.critical(
+			"CouchDB password is empty. Set couch.password or COUCHDB_PASS unless this server runs in admin party mode."
+		)
+	}
+
 	let dbManager = DBManager(couchConfig: couchConfig)
 	app.releaseInformerDBManager = dbManager
 
@@ -109,6 +123,8 @@ public func configure(_ app: Application) async throws {
 	app.releaseInformerWatcher = releaseWatcher
 	await releaseWatcher.setBot(bot)
 	await releaseWatcher.start()
+	// Without this the watcher's loops keep polling past app shutdown.
+	app.lifecycle.use(ReleaseWatcherLifecycle(watcher: releaseWatcher))
 
 	// uncomment to serve files from /Public folder
 	// app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
@@ -133,7 +149,11 @@ private func loadConfig(for app: Application) async throws -> ConfigReader {
 			let jsonProvider = try await FileProvider<JSONSnapshot>(filePath: FilePath(candidatePath))
 			providers.append(jsonProvider)
 		} catch {
-			logger.warning("Failed to load configuration file at \(candidatePath): \(error)")
+			// Every other bootstrap failure in this file is fatal. Carrying on here would fall
+			// back to the CouchConfig defaults — a different database than the operator asked
+			// for — and look like an empty subscription list rather than a misconfiguration.
+			logger.critical("Configuration file at \(candidatePath) could not be read: \(error)")
+			throw error
 		}
 	} else if let configuredPath {
 		logger.warning("Configuration file not found at \(configuredPath). Proceeding with environment variables only.")
@@ -163,4 +183,13 @@ private func makeCouchConfig(using config: ConfigReader) -> CouchConfig {
 		password: password,
 		timeout: Int64(timeout)
 	)
+}
+
+/// Stops the release watcher when the application shuts down.
+private struct ReleaseWatcherLifecycle: LifecycleHandler {
+	let watcher: ReleaseWatcher
+
+	func shutdownAsync(_ application: Application) async {
+		await watcher.stop()
+	}
 }
