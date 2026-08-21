@@ -115,9 +115,9 @@ public struct CouchDBDocumentStore: CouchDocumentStore {
 	/// A second gate on the response size.
 	///
 	/// Not the real ceiling: `couchdb-swift` has already collected the whole body by the time
-	/// it hands the response back (capped at `content-length ?? 10 MB`, where the *header*
-	/// wins), and re-attached it in memory. So this bounds what we agree to decode, not what
-	/// was read. Page sizes are chosen against the library's 10 MB, not against this number.
+	/// it hands the response back, capped at its own `maxResponseBytes` (10 MB by default, and
+	/// as of 3.1.0 a `content-length` header can no longer raise it). So this bounds what we
+	/// agree to decode, not what was read — and page sizes are chosen against that 10 MB.
 	static let maxResponseBytes = 10 * 1024 * 1024
 
 	public func fetchView(uri: String, queryItems: [URLQueryItem]?) async throws -> (statusCode: Int, body: Data) {
@@ -148,25 +148,17 @@ public struct CouchDBDocumentStore: CouchDocumentStore {
 
 	/// Interprets a failure from `delete`.
 	///
-	/// The library special-cases only 404 on delete: for a 409 it falls through to decoding
-	/// `CouchUpdateResponse`, whose `ok`/`id`/`rev` are not optional, so a conflict arrives as
-	/// a `DecodingError` rather than a `CouchDBClientError`. Without translating that, the
-	/// retry loop cannot see a delete conflict at all — and delete is the write where it is
-	/// most needed, since consolidating duplicates removes documents another task may hold.
-	///
-	/// The library intercepts only 401 and 404 before that decode and then discards the status,
-	/// so a 400, 412 or 5xx on DELETE also arrives as a `DecodingError` and is reported here as
-	/// a conflict. That is imprecise but safe: such a delete is retried three times and then
-	/// surfaced, so nothing spins and nothing is lost — a CouchDB outage during consolidation
-	/// is simply logged as a conflict. Distinguishing them would mean bypassing `client.delete`.
+	/// Thin now: couchdb-swift 3.1.0 throws `.conflictError` for a 409 and `.noData` for an
+	/// empty body, so there is nothing left to guess at. Before that a delete conflict arrived
+	/// as a `DecodingError` and had to be read as contention, which also swallowed a genuine
+	/// 400 or 5xx — hence the pinned minimum of 3.1.0 in `Package.swift`. A decoding failure
+	/// means what it says again: the response did not match the model.
 	///
 	/// A free function so the translation is testable; the call itself needs a live server.
 	static func storeError(fromDeleteFailure error: any Error) -> StoreError {
 		switch error {
 		case let couch as CouchDBClientError:
 			return StoreError(couch)
-		case is DecodingError:
-			return .conflict
 		case let store as StoreError:
 			return store
 		default:
@@ -185,8 +177,9 @@ public struct CouchDBDocumentStore: CouchDocumentStore {
 		try Self.verify(response)
 	}
 
-	/// An empty response body yields `CouchUpdateResponse(ok: false, id: "", rev: "")` rather
-	/// than a throw, so discarding the result would read a failed delete as a success.
+	/// Belt and braces. The library throws `.noData` for an empty body as of 3.1.0, so this
+	/// only catches a `2xx` that somehow reports `ok: false` — but the alternative is
+	/// discarding the result entirely, which would read a failed delete as a success.
 	static func verify(_ response: CouchUpdateResponse) throws {
 		guard response.ok else {
 			throw StoreError.unexpectedResponse

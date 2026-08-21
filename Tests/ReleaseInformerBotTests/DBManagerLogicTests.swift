@@ -320,20 +320,20 @@ struct DeleteFailureMappingTests {
 		return try JSONDecoder().decode(CouchDBError.self, from: Data(json.utf8))
 	}
 
-	/// `couchdb-swift` handles only 404 on delete; a 409 body reaches `JSONDecoder` and fails
-	/// there, so without translating a decoding failure the retry loop never sees a delete
-	/// conflict — the write where consolidating duplicates needs it most.
-	@Test("A decoding failure from a delete is treated as a conflict")
-	func decodingFailureIsAConflict() {
-		// Exactly what the library produces: CouchDB's conflict body decoded as though it were
-		// a `CouchUpdateResponse`.
-		let conflictBody = Data(#"{"error":"conflict","reason":"Document update conflict."}"#.utf8)
+	/// Up to couchdb-swift 3.0.2 a 409 on delete arrived as a `DecodingError`, so we had to
+	/// read any decoding failure as a conflict — which also swallowed a genuine 400 or 5xx.
+	/// 3.1.0 throws `.conflictError` properly, so a decoding failure means what it says again:
+	/// the response did not match the model. Treating it as a conflict now would retry a real
+	/// bug three times and report it as contention.
+	@Test("A decoding failure is not mistaken for a conflict")
+	func decodingFailureIsNotAConflict() {
+		let garbage = Data(#"{"unexpected":true}"#.utf8)
 		do {
-			_ = try JSONDecoder().decode(CouchUpdateResponse.self, from: conflictBody)
-			Issue.record("Expected the conflict body to fail decoding")
+			_ = try JSONDecoder().decode(CouchUpdateResponse.self, from: garbage)
+			Issue.record("Expected the body to fail decoding")
 		} catch {
 			#expect(error is DecodingError)
-			#expect(CouchDBDocumentStore.storeError(fromDeleteFailure: error) == .conflict)
+			#expect(CouchDBDocumentStore.storeError(fromDeleteFailure: error) == .unexpectedResponse)
 		}
 	}
 

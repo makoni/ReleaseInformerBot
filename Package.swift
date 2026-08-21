@@ -14,7 +14,7 @@ let package = Package(
         .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.19.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
         .package(url: "https://github.com/nerzh/swift-telegram-sdk.git", .upToNextMajor(from: "10.0.0")),
-        .package(url: "https://github.com/makoni/couchdb-swift.git", from: "3.0.0"),
+        .package(url: "https://github.com/makoni/couchdb-swift.git", from: "3.1.0"),
         .package(url: "https://github.com/apple/swift-configuration", from: "1.0.0"),
     ],
     targets: [
