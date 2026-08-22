@@ -2,7 +2,7 @@ name: Build on Ubuntu with latest Swift (Docker)
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ master ]
 
 jobs:
   swift-docker:
