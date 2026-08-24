@@ -320,37 +320,81 @@ struct DeleteFailureMappingTests {
 		return try JSONDecoder().decode(CouchDBError.self, from: Data(json.utf8))
 	}
 
-	/// `couchdb-swift` handles only 404 on delete; a 409 body reaches `JSONDecoder` and fails
-	/// there, so without translating a decoding failure the retry loop never sees a delete
-	/// conflict — the write where consolidating duplicates needs it most.
-	@Test("A decoding failure from a delete is treated as a conflict")
-	func decodingFailureIsAConflict() {
-		// Exactly what the library produces: CouchDB's conflict body decoded as though it were
-		// a `CouchUpdateResponse`.
-		let conflictBody = Data(#"{"error":"conflict","reason":"Document update conflict."}"#.utf8)
+	/// Up to couchdb-swift 3.0.2 a 409 on delete arrived as a `DecodingError`, so we had to
+	/// read any decoding failure as a conflict — which also swallowed a genuine 400 or 5xx.
+	/// 3.1.0 throws `.conflictError` properly, so a decoding failure means what it says again:
+	/// the response did not match the model. Treating it as a conflict now would retry a real
+	/// bug three times and report it as contention.
+	@Test("A decoding failure is not mistaken for a conflict")
+	func decodingFailureIsNotAConflict() {
+		let garbage = Data(#"{"unexpected":true}"#.utf8)
 		do {
-			_ = try JSONDecoder().decode(CouchUpdateResponse.self, from: conflictBody)
-			Issue.record("Expected the conflict body to fail decoding")
+			_ = try JSONDecoder().decode(CouchUpdateResponse.self, from: garbage)
+			Issue.record("Expected the body to fail decoding")
 		} catch {
 			#expect(error is DecodingError)
-			#expect(CouchDBDocumentStore.storeError(fromDeleteFailure: error) == .conflict)
+			#expect(CouchDBDocumentStore.storeError(from: error) == .unexpectedResponse)
 		}
 	}
 
 	@Test("A reported conflict stays a conflict")
 	func reportedConflictPassesThrough() throws {
 		let error = CouchDBClientError.deleteError(error: try couchError("conflict"))
-		#expect(CouchDBDocumentStore.storeError(fromDeleteFailure: error) == .conflict)
+		#expect(CouchDBDocumentStore.storeError(from: error) == .conflict)
+	}
+
+	/// The behaviour this whole change rests on, and it was pinned nowhere: the surviving
+	/// conflict test still fed 3.0.2's shape (`.deleteError` carrying CouchDB's "conflict"
+	/// string), so dropping `case let couch as CouchDBClientError` from the helper would stop
+	/// delete conflicts being retried with the suite still green.
+	@Test("The conflict shape 3.1.0 actually throws is recognised")
+	func recognisesTheShapeTheLibraryThrows() throws {
+		let error = CouchDBClientError.conflictError(error: try couchError("conflict"))
+		#expect(CouchDBDocumentStore.storeError(from: error) == .conflict)
+	}
+
+	/// Cancellation is not a database fault. Mapping it would put a spurious server-error line
+	/// in the log on every graceful shutdown, and lose the caller's ability to tell them apart.
+	@Test("Cancellation is not translated into a store error")
+	func cancellationIsNotAStoreError() async {
+		let store = CouchDBDocumentStore(db: "unused", config: CouchConfig())
+
+		await #expect(throws: CancellationError.self) {
+			try await store.translatingErrors { throw CancellationError() }
+		}
+	}
+
+	/// A reverse proxy answering with an HTML error page throws a `DecodingError`, which used
+	/// to escape `insert`, `update` and `ensureSchema` untranslated — the very leak
+	/// `StoreError` was introduced to close.
+	@Test("Every failure leaves the store as a StoreError")
+	func translationIsTotal() async {
+		let store = CouchDBDocumentStore(db: "unused", config: CouchConfig())
+		struct Odd: Error {}
+
+		await #expect(throws: StoreError.unexpectedResponse) {
+			try await store.translatingErrors { throw Odd() }
+		}
+		await #expect(throws: StoreError.conflict) {
+			try await store.translatingErrors {
+				throw CouchDBClientError.conflictError(
+					error: try JSONDecoder().decode(
+						CouchDBError.self,
+						from: Data(#"{"error":"conflict","reason":"x"}"#.utf8)
+					)
+				)
+			}
+		}
 	}
 
 	@Test("A missing document is not mistaken for a conflict")
 	func notFoundIsPreserved() throws {
 		let error = CouchDBClientError.deleteError(error: try couchError("not_found"))
-		#expect(CouchDBDocumentStore.storeError(fromDeleteFailure: error) == .notFound)
+		#expect(CouchDBDocumentStore.storeError(from: error) == .notFound)
 	}
 
-	/// The library returns `CouchUpdateResponse(ok: false, ...)` for an empty body instead of
-	/// throwing, so discarding the result would read a failed delete as a success.
+	/// Belt and braces since 3.1.0, which throws `.noData` for an empty body. It still guards
+	/// the one case that remains reachable: a `2xx` that reports `ok: false`.
 	@Test("A delete that did not report success is an error")
 	func unsuccessfulDeleteIsAnError() throws {
 		let refused = try JSONDecoder().decode(
@@ -374,7 +418,7 @@ struct DeleteFailureMappingTests {
 	@Test("An unrecognised failure is not silently retried forever")
 	func unknownFailureIsNotAConflict() {
 		struct Odd: Error {}
-		#expect(CouchDBDocumentStore.storeError(fromDeleteFailure: Odd()) == .unexpectedResponse)
+		#expect(CouchDBDocumentStore.storeError(from: Odd()) == .unexpectedResponse)
 	}
 }
 

@@ -53,7 +53,8 @@ public struct CouchDBDocumentStore: CouchDocumentStore {
 				couchPort: config.port,
 				userName: config.user,
 				userPassword: config.password,
-				requestsTimeout: config.timeout
+				requestsTimeout: config.timeout,
+				maxResponseBytes: Self.maxResponseBytes
 			)
 		)
 	}
@@ -66,15 +67,13 @@ public struct CouchDBDocumentStore: CouchDocumentStore {
 	public static func viewURI(_ view: String) -> String { "_design/list/_view/\(view)" }
 
 	public func ensureSchema() async throws {
-		do {
+		try await translatingErrors {
 			if try await client.dbExists(db) {
 				logger.info("Database \(db) exists.")
 			} else {
 				try await client.createDB(db)
 				logger.info("Database \(db) created.")
 			}
-		} catch let error as CouchDBClientError {
-			throw StoreError(error)
 		}
 
 		let designDocID = "_design/list"
@@ -94,9 +93,9 @@ public struct CouchDBDocumentStore: CouchDocumentStore {
 			let _: DesignDocument = try await client.get(fromDB: db, uri: designDocID)
 		} catch CouchDBClientError.notFound {
 			needsCreate = true
-		} catch let error as CouchDBClientError {
-			logger.error("Unexpected error while checking design document: \(error.localizedDescription)")
-			throw StoreError(error)
+		} catch {
+			logger.error("Unexpected error while checking design document: \(error)")
+			throw Self.storeError(from: error)
 		}
 
 		guard needsCreate else {
@@ -104,89 +103,81 @@ public struct CouchDBDocumentStore: CouchDocumentStore {
 			return
 		}
 
-		do {
-			_ = try await client.insert(dbName: db, doc: designDoc)
-		} catch let error as CouchDBClientError {
-			throw StoreError(error)
-		}
+		try await translatingErrors { _ = try await client.insert(dbName: db, doc: designDoc) }
 		logger.info("Design document created with by_bundle and by_chat views.")
 	}
 
-	/// A second gate on the response size.
+	/// The largest response body we will buffer.
 	///
-	/// Not the real ceiling: `couchdb-swift` has already collected the whole body by the time
-	/// it hands the response back (capped at `content-length ?? 10 MB`, where the *header*
-	/// wins), and re-attached it in memory. So this bounds what we agree to decode, not what
-	/// was read. Page sizes are chosen against the library's 10 MB, not against this number.
+	/// Handed to the library as well, so its bound and ours are the same number rather than
+	/// two constants kept in step by hand. The library collects the body before returning it,
+	/// so the local `collect` below can only ever see something already within this limit —
+	/// and `DBManager.viewPageSize` is sized against it.
 	static let maxResponseBytes = 10 * 1024 * 1024
 
 	public func fetchView(uri: String, queryItems: [URLQueryItem]?) async throws -> (statusCode: Int, body: Data) {
-		do {
+		try await translatingErrors {
 			let response = try await client.get(fromDB: db, uri: uri, queryItems: queryItems)
 			let bytes = try await response.body.collect(upTo: Self.maxResponseBytes)
 			return (Int(response.status.code), Data(bytes.readableBytesView))
-		} catch let error as CouchDBClientError {
-			throw StoreError(error)
 		}
 	}
 
 	public func insert(_ document: Subscription) async throws -> Subscription {
-		do {
-			return try await client.insert(dbName: db, doc: document)
-		} catch let error as CouchDBClientError {
-			throw StoreError(error)
-		}
+		try await translatingErrors { try await client.insert(dbName: db, doc: document) }
 	}
 
 	public func update(_ document: Subscription) async throws -> Subscription {
+		try await translatingErrors { try await client.update(dbName: db, doc: document) }
+	}
+
+	/// Runs `work`, translating anything it throws into a ``StoreError``.
+	///
+	/// Every operation goes through this so the store speaks one vocabulary. Catching only
+	/// `CouchDBClientError` was not enough: the library propagates a raw `DecodingError` when a
+	/// body parses as neither its model nor a CouchDB error — a reverse proxy's HTML error page,
+	/// say — and its size limit surfaces as `NIOTooManyBytesError`. Both used to escape
+	/// untranslated, which is the leak `StoreError` exists to close.
+	func translatingErrors<T>(_ work: () async throws -> T) async throws -> T {
 		do {
-			return try await client.update(dbName: db, doc: document)
-		} catch let error as CouchDBClientError {
-			throw StoreError(error)
+			return try await work()
+		} catch let cancellation as CancellationError {
+			// Not a database fault. Mapping it would log a server error on every graceful
+			// shutdown and hide the cancellation from the caller.
+			throw cancellation
+		} catch {
+			throw Self.storeError(from: error)
 		}
 	}
 
-	/// Interprets a failure from `delete`.
+	/// Interprets a failure from the client.
 	///
-	/// The library special-cases only 404 on delete: for a 409 it falls through to decoding
-	/// `CouchUpdateResponse`, whose `ok`/`id`/`rev` are not optional, so a conflict arrives as
-	/// a `DecodingError` rather than a `CouchDBClientError`. Without translating that, the
-	/// retry loop cannot see a delete conflict at all — and delete is the write where it is
-	/// most needed, since consolidating duplicates removes documents another task may hold.
+	/// Thin now: couchdb-swift 3.1.0 throws `.conflictError` for a 409 and `.noData` for an
+	/// empty body, so there is little left to infer. Before that a delete conflict arrived as a
+	/// `DecodingError` and had to be read as contention, which also swallowed genuine 400, 412
+	/// and 5xx responses — hence the pinned minimum of 3.1.0 in `Package.swift`. A decoding
+	/// failure means what it says again: the response did not match the model.
 	///
-	/// The library intercepts only 401 and 404 before that decode and then discards the status,
-	/// so a 400, 412 or 5xx on DELETE also arrives as a `DecodingError` and is reported here as
-	/// a conflict. That is imprecise but safe: such a delete is retried three times and then
-	/// surfaced, so nothing spins and nothing is lost — a CouchDB outage during consolidation
-	/// is simply logged as a conflict. Distinguishing them would mean bypassing `client.delete`.
-	///
-	/// A free function so the translation is testable; the call itself needs a live server.
-	static func storeError(fromDeleteFailure error: any Error) -> StoreError {
+	/// One edge remains: 3.1.0 checks for an empty body *before* it checks the status, so a 409
+	/// that arrives with no body still surfaces as `.noData` rather than as a conflict, and is
+	/// therefore not retried.
+	static func storeError(from error: any Error) -> StoreError {
 		switch error {
 		case let couch as CouchDBClientError:
 			return StoreError(couch)
-		case is DecodingError:
-			return .conflict
-		case let store as StoreError:
-			return store
 		default:
 			return .unexpectedResponse
 		}
 	}
 
 	public func delete(_ document: Subscription) async throws {
-		let response: CouchUpdateResponse
-		do {
-			response = try await client.delete(fromDb: db, doc: document)
-		} catch {
-			throw Self.storeError(fromDeleteFailure: error)
-		}
-
+		let response = try await translatingErrors { try await client.delete(fromDb: db, doc: document) }
 		try Self.verify(response)
 	}
 
-	/// An empty response body yields `CouchUpdateResponse(ok: false, id: "", rev: "")` rather
-	/// than a throw, so discarding the result would read a failed delete as a success.
+	/// Belt and braces. The library throws `.noData` for an empty body as of 3.1.0, so this
+	/// only catches a `2xx` that somehow reports `ok: false` — but the alternative is
+	/// discarding the result entirely, which would read a failed delete as a success.
 	static func verify(_ response: CouchUpdateResponse) throws {
 		guard response.ok else {
 			throw StoreError.unexpectedResponse

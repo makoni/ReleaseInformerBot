@@ -1,5 +1,5 @@
 {
-  "originHash" : "500ab4c1be46b217d373b0007c169f556994c101e6007e041bfd3e5127af10e4",
+  "originHash" : "8ec428bfcefd8be60316e2f9516b991791f66d812580425976def0b279f21816",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -33,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/makoni/couchdb-swift.git",
       "state" : {
-        "revision" : "30cb210ea88bdfd93c9c27a5a5a9c7931cc1dbff",
-        "version" : "3.0.2"
+        "revision" : "9f2bddce9b1a19adbd8181b38314cfef0516e9aa",
+        "version" : "3.1.0"
       }
     },
     {

@@ -173,8 +173,21 @@ public actor DBManager {
 	}
 
 	public func deleteSubscription(_ subscription: Subscription) async throws {
-		try await store.delete(subscription)
-		logger.info("Subscription for \(subscription.bundleID) has been deleted from the database.")
+		try await resolvingConflicts {
+			// Re-read rather than trusting the caller's copy. The watcher hands over a document
+			// loaded when the sweep began, so a `/add` landing in between bumps its `_rev` and
+			// CouchDB rejects the delete — the same reason `addNewVersion` re-reads.
+			let stored = try await self.subscriptions(forBundleID: subscription.bundleID)
+
+			guard let current = stored.first(where: { $0._id == subscription._id }) ?? stored.first else {
+				// Already gone, which is the outcome the caller wanted.
+				logger.info("Subscription for \(subscription.bundleID) was already absent.")
+				return
+			}
+
+			try await self.store.delete(current)
+			logger.info("Subscription for \(current.bundleID) has been deleted from the database.")
+		}
 	}
 
 	/// Re-runs `work` when the store reports that someone else wrote first.

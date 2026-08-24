@@ -2,27 +2,33 @@ name: Build on Ubuntu with latest Swift (Docker)
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ master, develop ]
+  # `update-dependencies.sh` commits and pushes straight to the checked-out branch, so
+  # without a push trigger a dependency bump reaches master having run nothing. The
+  # manifest allows up-to-next-major, so that is how a new minor could land unchecked.
+  push:
+    branches: [ master, develop ]
 
 jobs:
   swift-docker:
-    container: 
+    container:
       image: swift:latest
-    runs-on: ubuntu-22.04
+    # The build happens inside the container above, so the host image barely matters — which
+    # makes tracking the current default cheaper than pinning to an ageing LTS.
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@master
+      # Tracks the major so patches arrive on their own. Not `@master`, which is a ref last
+      # moved in July 2020 and still declaring `using: node12`.
+      uses: actions/checkout@v7
 
     - name: Swift build
       run: swift build -c release
-      
-#     - name: Upload a Build Artifact
-#       uses: actions/upload-artifact@v2.2.4
-#       with:
-#         name: Run
-#         path: .build/x86_64-unknown-linux-gnu/release/Run
-#         if-no-files-found: error
-#         retention-days: 90
-            
+
+    - name: Swift test
+      # The build alone cannot catch a behavioural regression — reintroducing a bad error
+      # mapping compiles perfectly well. The suite is what actually gates this repository.
+      run: swift test
+
     - name: Done
       run: echo Done
