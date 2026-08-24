@@ -553,6 +553,29 @@ struct DBManagerTests {
 		#expect(await store.deleteAttempts > 1)
 	}
 
+	/// `ReleaseWatcher` hands over a document loaded when the sweep began, so a `/add` landing
+	/// in between bumps its `_rev` and CouchDB rejects the delete. `addNewVersion` already
+	/// re-reads for exactly this reason; this was the one write path that did not.
+	@Test("Deleting works from a document whose revision has moved on")
+	func deletesFromAStaleDocument() async throws {
+		let store = StubCouchStore([doc("a.b.c", chats: [1])])
+		let dbManager = DBManager(store: store)
+
+		let stale = doc("a.b.c", chats: [1]).updateRevision("stale-rev")
+		try await dbManager.deleteSubscription(stale)
+
+		#expect(await store.storedDocuments.isEmpty)
+	}
+
+	@Test("Deleting a document that is already gone is not an error")
+	func deletingAnAbsentDocumentSucceeds() async throws {
+		let dbManager = DBManager(store: StubCouchStore())
+
+		await #expect(throws: Never.self) {
+			try await dbManager.deleteSubscription(doc("gone.app", chats: [1]))
+		}
+	}
+
 	// MARK: - View wiring
 
 	@Test("A missing design view is reported, not read as an empty database")
