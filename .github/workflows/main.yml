@@ -13,12 +13,14 @@ jobs:
   swift-docker:
     container:
       image: swift:latest
-    runs-on: ubuntu-22.04
+    # The build happens inside the container above, so the host image barely matters — which
+    # makes tracking the current default cheaper than pinning to an ageing LTS.
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout
-      # Pinned: `@master` on this action is a ref last moved in July 2020 that still
-      # declares `using: node12`.
-      uses: actions/checkout@v4
+      # Tracks the major so patches arrive on their own. Not `@master`, which is a ref last
+      # moved in July 2020 and still declaring `using: node12`.
+      uses: actions/checkout@v7
 
     - name: Swift build
       run: swift build -c release
