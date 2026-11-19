@@ -38,6 +38,15 @@
       }
     },
     {
+      "identity" : "ed25519",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/bytehubio/ed25519",
+      "state" : {
+        "revision" : "e2cce6ed0b69c2e5d69d0441d84360d987b1b199",
+        "version" : "1.1.0"
+      }
+    },
+    {
       "identity" : "multipart-kit",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/vapor/multipart-kit.git",
@@ -121,7 +130,7 @@
     {
       "identity" : "swift-crypto",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-crypto.git",
+      "location" : "https://github.com/apple/swift-crypto",
       "state" : {
         "revision" : "f8fad2f95ad67b45f6340c0960e2396094d67e07",
         "version" : "5.1.1"
@@ -143,6 +152,15 @@
       "state" : {
         "revision" : "9f982a7ec8dd815bf57024e39de592813ca14399",
         "version" : "1.7.4"
+      }
+    },
+    {
+      "identity" : "swift-extensions-pack",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/nerzh/swift-extensions-pack.git",
+      "state" : {
+        "revision" : "6ebed2787ea80f92bd16c7609e1f7c36b3887412",
+        "version" : "2.15.0"
       }
     },
     {
@@ -276,8 +294,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/nerzh/swift-telegram-sdk.git",
       "state" : {
-        "revision" : "8445b6c34615812e323e730a6bc6079ecd7e9d53",
-        "version" : "10.4.0"
+        "revision" : "86c9111fd7e5327e140bc476dc4bedcfc1a562a9",
+        "version" : "10.4.1"
       }
     },
     {
